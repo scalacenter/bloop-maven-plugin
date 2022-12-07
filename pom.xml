@@ -6,7 +6,7 @@
   <artifactId>bloop-maven-plugin</artifactId>
   <packaging>maven-plugin</packaging>
 
-  <version>1.5.5-SNAPSHOT</version>
+  <version>2.0.0-SNAPSHOT</version>
   <name>Bloop Maven Plugin</name>
   <description>A Maven plugin which exports your Maven build into a format Bloop can understand.</description>
   <url>https://scalacenter.github.io/bloop/docs/build-tools/maven</url>
@@ -78,9 +78,8 @@
             <id>mixed-compile</id>
             <phase>process-resources</phase>
             <goals>
-              <!--<goal>add-source</goal>-->
               <goal>compile</goal>
-              <!--<goal>testCompile</goal>-->
+              <goal>testCompile</goal>
             </goals>
           </execution>
         </executions>
@@ -109,6 +108,9 @@
       <groupId>org.apache.maven</groupId>
       <artifactId>maven-plugin-api</artifactId>
       <version>3.6.1</version>
+      <!-- I believe this should be provided as well, but currently it's not in the last version.
+        This is probably due to things breaking if you bump up since the mojo scanner isn't compatible
+      so we'll need some changes to bump this or to make this provided. -->
       <!--<scope>provided</scope>-->
     </dependency>
     <dependency>
@@ -129,6 +131,12 @@
       <groupId>org.apache.maven.shared</groupId>
       <artifactId>maven-verifier</artifactId>
       <version>1.7.2</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.github.sbt</groupId>
+      <artifactId>junit-interface</artifactId>
+      <version>0.13.3</version>
       <scope>test</scope>
     </dependency>
   </dependencies>

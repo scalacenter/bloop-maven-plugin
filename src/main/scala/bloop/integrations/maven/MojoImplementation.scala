@@ -147,9 +147,11 @@ object MojoImplementation {
     val dependencies: List[MavenProject] =
       session.getProjectDependencyGraph.getUpstreamProjects(project, true).asScala.toList
     val dependencyNames: List[String] = dependencies.flatMap((dep: MavenProject) => {
-      val matchingArtifacts: Set[Artifact] = project.getArtifacts.asScala.filter((a: Artifact) =>
-        ArtifactUtils.versionlessKey(dep.getArtifact) == ArtifactUtils.versionlessKey(a)
-      ).toSet
+      val matchingArtifacts: Set[Artifact] = project.getArtifacts.asScala
+        .filter((a: Artifact) =>
+          ArtifactUtils.versionlessKey(dep.getArtifact) == ArtifactUtils.versionlessKey(a)
+        )
+        .toSet
 
       log.info(s"Dependency $dep, $matchingArtifacts")
       matchingArtifacts
@@ -236,7 +238,7 @@ object MojoImplementation {
                 case _ =>
               }
             resolveArtifact(art).foreach { resolvedFile =>
-              //since we don't resolve dependencies automatically in the plugin, this will be null
+              // since we don't resolve dependencies automatically in the plugin, this will be null
               art.setFile(resolvedFile)
             }
             if (mojo.shouldDownloadSources()) {
