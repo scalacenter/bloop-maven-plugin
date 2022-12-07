@@ -58,12 +58,17 @@
   </properties>
 
   <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-plugin-plugin</artifactId>
+          <version>3.6.1</version>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+
     <plugins>
-      <plugin>
-        <groupId>org.apache.maven.plugin</groupId>
-        <artifactId>maven-plugin-plugin</artifactId>
-        <version>3.6.1</version>
-      </plugin>
       <plugin>
         <groupId>net.alchim31.maven</groupId>
         <artifactId>scala-maven-plugin</artifactId>
@@ -73,7 +78,7 @@
             <id>mixed-compile</id>
             <phase>process-resources</phase>
             <goals>
-              <goal>add-source</goal>
+              <!--<goal>add-source</goal>-->
               <goal>compile</goal>
               <!--<goal>testCompile</goal>-->
             </goals>

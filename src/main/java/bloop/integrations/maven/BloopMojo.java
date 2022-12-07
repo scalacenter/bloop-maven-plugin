@@ -17,6 +17,9 @@ import org.eclipse.aether.repository.RemoteRepository;
 import java.io.File;
 import java.util.List;
 
+/**
+ * A Mojo that translates your Maven build to a Bloop build.
+ */
 @Mojo(
     name = "bloopInstall", 
     threadSafe = true, 
