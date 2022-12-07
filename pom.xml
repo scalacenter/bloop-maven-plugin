@@ -1,0 +1,131 @@
+<?xml version="1.0"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>ch.epfl.scala</groupId>
+  <artifactId>bloop-maven-plugin</artifactId>
+  <packaging>maven-plugin</packaging>
+
+  <version>1.5.5-SNAPSHOT</version>
+  <name>Bloop Maven Plugin</name>
+  <description>A Maven plugin which exports your Maven build into a format Bloop can understand.</description>
+  <url>https://scalacenter.github.io/bloop/docs/build-tools/maven</url>
+  <inceptionYear>2017</inceptionYear>
+
+  <scm>
+    <connection>scm:git:git://github.com/scalacenter/maven-bloop.git</connection>
+    <developerConnection>scm:git:git@github.com:scalacenter/maven-bloop.git</developerConnection>
+    <url>https://github.com/scalacenter/maven-bloop/tree/${project.scm.tag}</url>
+    <tag>HEAD</tag>
+  </scm>
+
+  <ciManagement>
+    <system>GitHub Actions</system>
+    <url>https://github.com/scalacenter/maven-bloop/actions</url>
+  </ciManagement>
+
+  <issueManagement>
+    <system>GitHub</system>
+    <url>https://github.com/scalacenter/maven-bloop/issues</url>
+  </issueManagement>
+
+  <developers>
+    <developer>
+      <id>jvican</id>
+      <name>Jorge Vicente Cantero</name>
+      <email>jorge@vican.me</email>
+    </developer>
+    <developer>
+      <id>Duhemm</id>
+      <name>Martin Duhem</name>
+      <email>martin.duhem@gmail.com</email>
+    </developer>
+  </developers>
+
+  <licenses>
+    <license>
+      <name>Apache-2.0</name>
+      <url>http://www.apache.org/licenses/LICENSE-2.0</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+
+  <properties>
+    <maven.compiler.target>1.8</maven.compiler.target>
+    <maven.compiler.source>1.8</maven.compiler.source>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+  </properties>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugin</groupId>
+        <artifactId>maven-plugin-plugin</artifactId>
+        <version>3.6.1</version>
+      </plugin>
+      <plugin>
+        <groupId>net.alchim31.maven</groupId>
+        <artifactId>scala-maven-plugin</artifactId>
+        <version>4.5.3</version>
+        <executions>
+          <execution>
+            <id>mixed-compile</id>
+            <phase>process-resources</phase>
+            <goals>
+              <goal>add-source</goal>
+              <goal>compile</goal>
+              <!--<goal>testCompile</goal>-->
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>scala-library</artifactId>
+      <version>2.13.10</version>
+    </dependency>
+    <dependency>
+      <groupId>ch.epfl.scala</groupId>
+      <artifactId>bloop-config_2.13</artifactId>
+      <version>1.5.4</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.maven</groupId>
+      <artifactId>maven-core</artifactId>
+      <version>3.6.1</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.maven</groupId>
+      <artifactId>maven-plugin-api</artifactId>
+      <version>3.6.1</version>
+      <!--<scope>provided</scope>-->
+    </dependency>
+    <dependency>
+      <groupId>org.apache.maven.plugin-tools</groupId>
+      <artifactId>maven-plugin-annotations</artifactId>
+      <version>3.5</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>net.alchim31.maven</groupId>
+      <artifactId>scala-maven-plugin</artifactId>
+      <version>4.5.6</version>
+      <type>maven-plugin</type>
+    </dependency>
+
+    <!-- Test -->
+    <dependency>
+      <groupId>org.apache.maven.shared</groupId>
+      <artifactId>maven-verifier</artifactId>
+      <version>1.7.2</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+</project>
