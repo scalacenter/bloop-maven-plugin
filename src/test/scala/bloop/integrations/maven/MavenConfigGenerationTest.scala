@@ -14,12 +14,11 @@ import scala.util.control.NonFatal
 
 import bloop.config.Config
 import bloop.config.Tag
-import bloop.integrations.utils.BaseConfigSuite
 
 import org.junit.Assert._
 import org.junit.Test
 
-class MavenConfigGenerationSuite extends BaseConfigSuite {
+class MavenConfigGenerationTest extends BaseConfigSuite {
 
   @Test
   def basicScala3() = {
@@ -234,6 +233,7 @@ class MavenConfigGenerationSuite extends BaseConfigSuite {
   private def check(testProject: String, submodules: List[String] = Nil)(
       checking: (Config.File, String, List[Config.File]) => Unit
   ): Unit = {
+    println(s"Checking $testProject")
     def nameFromDirectory(projectString: String) =
       Paths.get(projectString).getParent().getFileName().toString()
     val tempDir = Files.createTempDirectory("mavenBloop")
@@ -257,9 +257,8 @@ class MavenConfigGenerationSuite extends BaseConfigSuite {
       "-jar",
       wrapperJar.toString()
     )
-    val version = bloop.BuildInfo.version
     val command =
-      List(s"ch.epfl.scala:maven-bloop_2.13:$version:bloopInstall", "-DdownloadSources=true")
+      List(s"ch.epfl.scala:bloop-maven-plugin:bloopInstall", "-DdownloadSources=true")
     val allArgs = List(
       javaArgs,
       jarArgs,
