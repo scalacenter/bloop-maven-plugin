@@ -12,8 +12,9 @@ jobs:
   test:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        java: [ '8' ]
+        java: [ '8', '17' ]
         os: [ 'ubuntu-latest', 'macOS-latest' ]
 
     steps:
@@ -27,6 +28,12 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: ${{ matrix.java }}
+          cache: 'maven'
 
       - name: Run install
-        run: ./mvnw install
+        # Skip tests because we require the install before the publish
+        # we'll then test right after
+        run: ./mvnw clean install -DskipTests
+
+      - name: Run tests
+        run: ./mvnw test
