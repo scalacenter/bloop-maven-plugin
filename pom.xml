@@ -14,8 +14,9 @@
 
   <scm>
     <connection>scm:git:https://github.com/scalacenter/bloop-maven-plugin.git</connection>
-    <developerConnection>scm:git:git@github.com:scalacenter/bloop-maven-plugin.git</developerConnection>
+    <developerConnection>scm:git:https://github.com/scalacenter/bloop-maven-plugin.git</developerConnection>
     <url>https://github.com/scalacenter/bloop-maven-plugin</url>
+    <tag>HEAD</tag>
   </scm>
 
   <ciManagement>
