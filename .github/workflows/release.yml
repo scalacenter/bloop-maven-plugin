@@ -26,7 +26,7 @@ jobs:
         gpg-passphrase: MAVEN_PGP_PASSPHRASE # env variable for GPG private key passphrase
 
     - name: Publish to Apache Maven Central
-      run: mvn release:prepare release:perform -DskipTests -Drevision=${{github.event.inputs.version}} -Prelease
+      run: mvn release:prepare release:perform -DskipTests -DreleaseVersion=${{github.event.inputs.version}} -Prelease
       env:
         MAVEN_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
         MAVEN_CENTRAL_TOKEN: ${{ secrets.SONATYPE_PASSWORD }}
