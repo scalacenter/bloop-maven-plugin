@@ -6,7 +6,7 @@
   <artifactId>bloop-maven-plugin</artifactId>
   <packaging>maven-plugin</packaging>
 
-  <version>2.0.0-SNAPSHOT</version>
+  <version>${revision}</version>
   <name>Bloop Maven Plugin</name>
   <description>A Maven plugin which exports your Maven build into a format Bloop can understand.</description>
   <url>https://scalacenter.github.io/bloop/docs/build-tools/maven</url>
@@ -87,16 +87,45 @@
     </plugins>
   </build>
 
+  <profiles>
+    <profile>
+        <id>release</id>
+        <build>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-gpg-plugin</artifactId>
+                    <version>1.6</version>
+                    <configuration>
+                        <gpgArguments>
+                            <arg>--pinentry-mode</arg>
+                            <arg>loopback</arg>
+                        </gpgArguments>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <phase>verify</phase>
+                            <goals>
+                                <goal>sign</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+            </plugins>
+        </build>
+    </profile>
+</profiles>
+
   <dependencies>
     <dependency>
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-library</artifactId>
-      <version>2.13.10</version>
+      <version>2.13.6</version>
     </dependency>
     <dependency>
       <groupId>ch.epfl.scala</groupId>
       <artifactId>bloop-config_2.13</artifactId>
-      <version>1.5.4</version>
+      <version>1.5.5</version>
     </dependency>
     <dependency>
       <groupId>org.apache.maven</groupId>
