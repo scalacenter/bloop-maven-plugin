@@ -12,6 +12,14 @@
   <url>https://scalacenter.github.io/bloop/docs/build-tools/maven</url>
   <inceptionYear>2017</inceptionYear>
 
+  <properties>
+    <maven.compiler.target>1.8</maven.compiler.target>
+    <maven.compiler.source>1.8</maven.compiler.source>
+    <nexus.url>https://oss.sonatype.org</nexus.url>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+  </properties>
+
   <scm>
     <connection>scm:git:https://github.com/scalacenter/bloop-maven-plugin.git</connection>
     <developerConnection>scm:git:https://github.com/scalacenter/bloop-maven-plugin.git</developerConnection>
@@ -31,12 +39,12 @@
 
   <distributionManagement>
       <snapshotRepository>
-          <id>ossrh</id>
-          <url>https://oss.sonatype.org/content/repositories/snapshots</url>
+          <id>central</id>
+          <url>${nexus.url}/content/repositories/snapshots</url>
       </snapshotRepository>
       <repository>
-          <id>ossrh</id>
-          <url>https://oss.sonatype.org/service/local/staging/deploy/maven2</url>
+          <id>central</id>
+          <url>${nexus.url}/service/local/staging/deploy/maven2</url>
       </repository>
   </distributionManagement>
 
@@ -60,13 +68,6 @@
       <distribution>repo</distribution>
     </license>
   </licenses>
-
-  <properties>
-    <maven.compiler.target>1.8</maven.compiler.target>
-    <maven.compiler.source>1.8</maven.compiler.source>
-    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-  </properties>
 
   <build>
     <pluginManagement>
@@ -100,26 +101,38 @@
 
   <profiles>
     <profile>
-        <id>release</id>
-        <build>
-            <plugins>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-gpg-plugin</artifactId>
-                    <version>3.0.1</version>
-                    <executions>
-                        <execution>
-                            <phase>verify</phase>
-                            <goals>
-                                <goal>sign</goal>
-                            </goals>
-                        </execution>
-                    </executions>
-                </plugin>
-            </plugins>
-        </build>
+      <id>release</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-gpg-plugin</artifactId>
+            <version>3.0.1</version>
+            <executions>
+              <execution>
+                <phase>verify</phase>
+                <goals>
+                  <goal>sign</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+
+          <plugin>
+            <groupId>org.sonatype.plugins</groupId>
+            <artifactId>nexus-staging-maven-plugin</artifactId>
+            <version>1.6.13</version>
+            <extensions>true</extensions>
+            <configuration>
+              <nexusUrl>${nexus.url}</nexusUrl>
+              <serverId>central</serverId>
+              <autoReleaseAfterClose>true</autoReleaseAfterClose>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
-</profiles>
+  </profiles>
 
   <dependencies>
     <dependency>
@@ -142,9 +155,11 @@
       <groupId>org.apache.maven</groupId>
       <artifactId>maven-plugin-api</artifactId>
       <version>3.6.1</version>
-      <!-- I believe this should be provided as well, but currently it's not in the last version.
+      <!--
+        I believe this should be provided as well, but currently it's not in the last version.
         This is probably due to things breaking if you bump up since the mojo scanner isn't compatible
-      so we'll need some changes to bump this or to make this provided. -->
+        so we'll need some changes to bump this or to make this provided.
+      -->
       <!--<scope>provided</scope>-->
     </dependency>
     <dependency>
