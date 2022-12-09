@@ -25,6 +25,14 @@ jobs:
         gpg-private-key: ${{ secrets.PGP_SECRET }} # Value of the GPG private key to import
         gpg-passphrase: MAVEN_PGP_PASSPHRASE # env variable for GPG private key passphrase
 
+    - name: Set up GPG
+      run: |
+        echo "$PGP_SECRET" > private.asc
+        gpg --import --batch private.asc
+        rm private.asc
+      env:
+        PGP_SECRET: ${{ secrets.PGP_SECRET }}
+
     # Even using -DskipTests cause tests to run in the release it seems
     - name: Install so tests can pass in the release 
       run: mvn install -DskipTests
