@@ -30,7 +30,7 @@ jobs:
       run: mvn install -DskipTests
 
     - name: Publish to Apache Maven Central
-      run: mvn release:prepare release:perform -DskipTests -DreleaseVersion=${{github.event.inputs.version}} -Prelease -Dgpg.passphrase=${{secrets.PGP_PASSPHRASE}}
+      run: mvn release:prepare release:perform -DskipTests -DreleaseVersion=${{github.event.inputs.version}} -Prelease
       env:
         MAVEN_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
         MAVEN_CENTRAL_TOKEN: ${{ secrets.SONATYPE_PASSWORD }}
