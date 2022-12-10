@@ -16,7 +16,7 @@ public class ExtendedScalaContinuousCompileMojo extends ScalaContinuousCompileMo
     }
 
     public List<String> getScalacArgs() throws Exception {
-        return super.getScalaOptions();
+        return super.getScalacOptions();
     }
 
     public List<File> getCompileSourceDirectories() throws Exception {
@@ -59,10 +59,9 @@ public class ExtendedScalaContinuousCompileMojo extends ScalaContinuousCompileMo
         return FileUtils.fileOf(testAnalysisCacheFile, useCanonicalPath);
     }
 
-    // Latest 3.3.1 fails to find java home for Spark (apparently), so we use the logic in 3.2.2
     public File getJavaHome() throws Exception {
         String _javaExec = null;
-        Toolchain toolchain = toolchainManager.getToolchainFromBuildContext("jdk", session);
+        Toolchain toolchain = getToolchain();
         if (toolchain != null)
             _javaExec = toolchain.findTool("java");
 
