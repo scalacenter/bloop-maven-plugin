@@ -1,5 +1,9 @@
 # bloop-maven-plugin
 
+<img alt="release" src="https://img.shields.io/github/release/scalacenter/bloop-maven-plugin.svg?color=green&logo=github&style=flat-square">
+<img alt="license" src="https://img.shields.io/github/license/scalacenter/bloop-maven-plugin.svg?color=blue&style=flat-square" />
+<img alt="discord" src="https://img.shields.io/discord/632150470000902164?label=%23bloop%20in%20the%20Scala%20Discord&style=flat-square" />
+
 This repository holds the Maven Plugin for
 [Bloop](https://scalacenter.github.io/bloop/).
 
