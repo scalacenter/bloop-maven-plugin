@@ -18,9 +18,7 @@ import bloop.config.Tag
 import org.junit.Assert._
 import org.junit.Test
 import java.util.Properties
-import scala.io.Source
 import java.io.InputStream
-import scala.io.BufferedSource
 
 class MavenConfigGenerationTest extends BaseConfigSuite {
 

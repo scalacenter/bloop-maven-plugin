@@ -96,6 +96,11 @@
               <goal>compile</goal>
               <goal>testCompile</goal>
             </goals>
+            <configuration>
+              <args>
+                <arg>-Wunused:imports</arg>
+              </args>
+            </configuration>
           </execution>
         </executions>
       </plugin>
