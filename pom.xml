@@ -13,6 +13,7 @@
   <inceptionYear>2017</inceptionYear>
 
   <properties>
+    <version>${project.version}</version>
     <maven.compiler.target>1.8</maven.compiler.target>
     <maven.compiler.source>1.8</maven.compiler.source>
     <nexus.url>https://oss.sonatype.org</nexus.url>
@@ -31,12 +32,12 @@
 
   <ciManagement>
     <system>GitHub Actions</system>
-    <url>https://github.com/scalacenter/maven-bloop/actions</url>
+    <url>https://github.com/scalacenter/bloop-maven-plugin/actions</url>
   </ciManagement>
 
   <issueManagement>
     <system>GitHub</system>
-    <url>https://github.com/scalacenter/maven-bloop/issues</url>
+    <url>https://github.com/scalacenter/bloop-maven-plugin/issues</url>
   </issueManagement>
 
   <distributionManagement>
@@ -95,6 +96,23 @@
               <goal>compile</goal>
               <goal>testCompile</goal>
             </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>properties-maven-plugin</artifactId>
+        <version>1.1.0</version>
+        <executions>
+          <execution>
+            <phase>generate-resources</phase>
+            <goals>
+              <goal>write-project-properties</goal>
+            </goals>
+            <configuration>
+              <outputFile>./src/test/resources/bloop.properties</outputFile>
+            </configuration>
           </execution>
         </executions>
       </plugin>

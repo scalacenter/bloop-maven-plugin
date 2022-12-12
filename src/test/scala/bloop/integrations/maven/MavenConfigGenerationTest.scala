@@ -17,6 +17,10 @@ import bloop.config.Tag
 
 import org.junit.Assert._
 import org.junit.Test
+import java.util.Properties
+import scala.io.Source
+import java.io.InputStream
+import scala.io.BufferedSource
 
 class MavenConfigGenerationTest extends BaseConfigSuite {
 
@@ -257,8 +261,15 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
       "-jar",
       wrapperJar.toString()
     )
+
+    val bloopProperties: InputStream = getClass().getResourceAsStream("/bloop.properties")
+
+    val properties = new Properties()
+    properties.load(bloopProperties)
+    val version = properties.get("version").asInstanceOf[String]
+
     val command =
-      List(s"ch.epfl.scala:bloop-maven-plugin:bloopInstall", "-DdownloadSources=true")
+      List(s"ch.epfl.scala:bloop-maven-plugin:$version:bloopInstall", "-DdownloadSources=true")
     val allArgs = List(
       javaArgs,
       jarArgs,

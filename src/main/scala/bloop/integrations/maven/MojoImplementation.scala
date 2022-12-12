@@ -192,7 +192,8 @@ object MojoImplementation {
           artifact.getGroupId()
       }
       .getOrElse("org.scala-lang")
-    val scalacArgs = mojo.getScalacArgs().asScala.toList.filter(_ != null)
+    val scalacArgs =
+      Try(mojo.getScalacArgs()).toOption.toList.map(_.asScala.toList).flatten.filter(_ != null)
 
     def writeConfig(
         sourceDirs0: Seq[File],
