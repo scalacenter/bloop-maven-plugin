@@ -2,3 +2,4 @@
 .bloop/
 target/
 release.properties
+bloop.properties

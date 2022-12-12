@@ -33,7 +33,7 @@ jobs:
       - name: Run install
         # Skip tests because we require the install before the publish
         # we'll then test right after
-        run: ./mvnw clean install -DskipTests
+        run: mvn clean install -DskipTests
 
       - name: Run tests
-        run: ./mvnw test
+        run: mvn test
