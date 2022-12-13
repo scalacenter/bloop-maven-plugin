@@ -137,8 +137,8 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
         // junit transitive dependency
         val junitModule = resolutionModules2.find(_.name == "junit")
         assert(junitModule.exists { m =>
-          m.artifacts.exists(_.path.toString().contains("junit-4.13.1-sources.jar"))
-          m.artifacts.exists(_.path.toString().contains("junit-4.13.1.jar"))
+          m.artifacts.exists(_.path.toString().contains("junit-4.13.2.1-sources.jar"))
+          m.artifacts.exists(_.path.toString().contains("junit-4.13.2.1.jar"))
         })
 
         // scaltags in dependend module
