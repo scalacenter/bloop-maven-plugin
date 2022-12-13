@@ -25,17 +25,13 @@ jobs:
         gpg-private-key: ${{ secrets.PGP_SECRET }} # Value of the GPG private key to import
         gpg-passphrase: MAVEN_GPG_PASSPHRASE # env variable for GPG private key passphrase
 
-    # Even using -DskipTests cause tests to run in the release it seems
-    - name: Install so tests can pass in the release 
-      run: mvn install -DskipTests
-
     - name: Setup git profile
       run: |
         git config --global user.name "github-actions[bot]"
         git config --global user.email "123456+github-actions[bot]@users.noreply.github.com"
 
     - name: Publish to Apache Maven Central
-      run: mvn release:prepare release:perform -DskipTests -DreleaseVersion=${{github.event.inputs.version}} -Prelease
+      run: mvn clean -Darguments=-DskipTests release:prepare release:perform -DreleaseVersion=${{github.event.inputs.version}} -Prelease
       env:
         MAVEN_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
         MAVEN_CENTRAL_TOKEN: ${{ secrets.SONATYPE_PASSWORD }}
