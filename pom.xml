@@ -6,7 +6,7 @@
   <artifactId>bloop-maven-plugin</artifactId>
   <packaging>maven-plugin</packaging>
 
-  <version>2.0.0-RC5-SNAPSHOT</version>
+  <version>2.0.0</version>
   <name>Bloop Maven Plugin</name>
   <description>A Maven plugin which exports your Maven build into a format Bloop can understand.</description>
   <url>https://scalacenter.github.io/bloop/docs/build-tools/maven</url>
@@ -27,7 +27,7 @@
     <connection>scm:git:https://github.com/scalacenter/bloop-maven-plugin.git</connection>
     <developerConnection>scm:git:https://github.com/scalacenter/bloop-maven-plugin.git</developerConnection>
     <url>https://github.com/scalacenter/bloop-maven-plugin</url>
-    <tag>HEAD</tag>
+    <tag>bloop-maven-plugin-2.0.0</tag>
   </scm>
 
   <ciManagement>
