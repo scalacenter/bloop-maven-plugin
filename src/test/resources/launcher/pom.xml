@@ -39,9 +39,6 @@
         <artifactId>scala-maven-plugin</artifactId>
         <version>4.8.1</version>
         <configuration>
-          <args>
-            <arg>test</arg>
-          </args>
           <launcher>launcher-2</launcher>
           <launchers>
             <launcher>
