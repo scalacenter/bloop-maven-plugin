@@ -55,7 +55,7 @@ object MojoImplementation {
     }
 
     val currentConfig = mojoExecution.getConfiguration
-    val dom = newConfig.map(nc => Xpp3Dom.mergeXpp3Dom(currentConfig, nc))
+    val dom = newConfig.map(nc => Xpp3Dom.mergeXpp3Dom(nc, currentConfig))
     Try {
       dom.foreach(mojoExecution.setConfiguration)
       val mojo = mavenPluginManager
@@ -167,11 +167,13 @@ object MojoImplementation {
     val launchers = mojo.getLaunchers()
     val launcher = launchers
       .find(_.getId == launcherId)
+      .orElse {
+        if (launcherId.nonEmpty)
+          log.warn(s"Falling back to first launcher: Launcher ID '${launcherId}' does not exist")
+        launchers.headOption
+      }
       .getOrElse {
-        if (launchers.isEmpty)
-          log.info(s"Using empty launcher: no run setup for ${project.getName}.")
-        else if (launcherId.nonEmpty)
-          log.warn(s"Using empty launcher: Launcher ID '${launcherId}' does not exist")
+        log.info(s"Using empty launcher: no run setup for ${project.getName}.")
         emptyLauncher
       }
 

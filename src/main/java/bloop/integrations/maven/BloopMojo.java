@@ -85,6 +85,7 @@ public class BloopMojo extends ExtendedScalaContinuousCompileMojo {
     private ModuleType moduleType;
     private List<String> javaCompilerArgs;
 
+    @Parameter(property = "launchers")
     private AppLauncher[] launchers;
 
     @Parameter(property = "sourceDir", defaultValue = "$mainSourceDir")
