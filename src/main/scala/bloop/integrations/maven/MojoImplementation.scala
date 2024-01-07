@@ -70,8 +70,6 @@ object MojoImplementation {
     }
   }
 
-  private val emptyLauncher = new AppLauncher("", "", Array(), Array())
-
   def writeCompileAndTestConfiguration(mojo: BloopMojo, session: MavenSession, log: Log): Unit = {
     import scala.collection.JavaConverters._
     def abs(file: File): Path = {
@@ -163,18 +161,14 @@ object MojoImplementation {
     val configDir = mojo.getBloopConfigDir.toPath()
     if (!Files.exists(configDir)) Files.createDirectory(configDir)
 
-    val launcherId = mojo.getLauncher()
+    val launcherId = Option(mojo.getLauncher()).filter(_.nonEmpty)
     val launchers = mojo.getLaunchers()
-    val launcher = launchers
-      .find(_.getId == launcherId)
+    val launcher = launcherId
+      .flatMap(id => launchers.find(_.getId == id))
       .orElse {
         if (launcherId.nonEmpty)
           log.warn(s"Falling back to first launcher: Launcher ID '${launcherId}' does not exist")
         launchers.headOption
-      }
-      .getOrElse {
-        log.info(s"Using empty launcher: no run setup for ${project.getName}.")
-        emptyLauncher
       }
 
     // check if Scala is contained in this project
@@ -203,7 +197,7 @@ object MojoImplementation {
         // needs to be lazy, since we resolve artifacts later on
         classpath0: () => java.util.List[_],
         resources0: java.util.List[_],
-        launcher: AppLauncher,
+        launcher: Option[AppLauncher],
         configuration: String
     ): Unit = {
       val suffix = if (configuration == "compile") "" else s"-$configuration"
@@ -282,8 +276,9 @@ object MojoImplementation {
               Config.Scala(scalaOrganization, mojo.getScalaArtifactID(), context.version().toString(), scalacArgs, allScalaJars, analysisOut, Some(compileSetup))
           }
         val javaHome = Some(abs(mojo.getJavaHome().getParentFile.getParentFile))
-        val mainClass = if (launcher.getMainClass().isEmpty) None else Some(launcher.getMainClass())
-        val platform = Some(Config.Platform.Jvm(Config.JvmConfig(javaHome, launcher.getJvmArgs().toList), mainClass, None, None, None))
+        val jvmArgs = launcher.map(_.getJvmArgs.toList).getOrElse(List.empty)
+        val mainClass = launcher.map(_.getMainClass).filter(_.nonEmpty)
+        val platform = Some(Config.Platform.Jvm(Config.JvmConfig(javaHome, jvmArgs), mainClass, None, None, None))
         val resources = Some(resources0.asScala.toList.flatMap{
           case a: Resource => Option(Paths.get(a.getDirectory()))
           case _ => None

@@ -8,13 +8,6 @@ public class AppLauncher extends Launcher {
         this.args = new String[0];
     }
 
-    public AppLauncher(String id, String mainClass, String[] jvmArgs, String[] args) {
-        this.id = id;
-        this.mainClass = mainClass;
-        this.jvmArgs = jvmArgs;
-        this.args = args;
-    }
-
     public String getId() {
         return id;
     }
