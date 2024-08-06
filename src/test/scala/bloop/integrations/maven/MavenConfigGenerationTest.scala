@@ -13,6 +13,7 @@ import scala.util.Try
 import scala.util.control.NonFatal
 
 import bloop.config.Config
+import bloop.config.Config.Platform
 import bloop.config.Tag
 
 import org.junit.Assert._
@@ -63,6 +64,34 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
 
       assertNoConfigsHaveAnyJars(List(configFile), List(s"$projectName", s"$projectName-test"))
       assertAllConfigsMatchJarNames(List(configFile), List("scala-library", "munit"))
+    }
+  }
+
+  @Test
+  def launcher() = {
+    check("launcher/pom.xml") { (configFile, projectName, subprojects) =>
+      assert(subprojects.isEmpty)
+      assert(configFile.project.`scala`.isDefined)
+      assertEquals("2.13.12", configFile.project.`scala`.get.version)
+      assertEquals("org.scala-lang", configFile.project.`scala`.get.organization)
+      assert(
+        !configFile.project.`scala`.get.jars.exists(_.toString.contains("scala3-compiler_3")),
+        "No Scala 3 jar should be present."
+      )
+      assert(!hasCompileClasspathEntryName(configFile, "scala3-library_3"))
+      assert(hasCompileClasspathEntryName(configFile, "scala-library"))
+
+      assert(hasTag(configFile, Tag.Library))
+
+      assertNoConfigsHaveAnyJars(List(configFile), List(s"$projectName", s"$projectName-test"))
+      assertAllConfigsMatchJarNames(List(configFile), List("scala-library", "munit"))
+
+      configFile.project.platform match {
+        case Some(jvm: Platform.Jvm) =>
+          assertEquals(jvm.config.options, List("--jvm-arg a", "--jvm-arg b"))
+          assertEquals(jvm.mainClass, Some("com.example.Main"))
+        case _ => fail("Missing platform")
+      }
     }
   }
 

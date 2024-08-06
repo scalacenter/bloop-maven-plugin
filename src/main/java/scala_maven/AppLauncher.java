@@ -1,11 +1,11 @@
 package scala_maven;
 
 public class AppLauncher extends Launcher {
-    public AppLauncher(String id, String mainClass, String[] jvmArgs, String[] args) {
-        this.id = id;
-        this.mainClass = mainClass;
-        this.jvmArgs = jvmArgs;
-        this.args = args;
+    public AppLauncher() {
+        this.id = "";
+        this.mainClass = "";
+        this.jvmArgs = new String[0];
+        this.args = new String[0];
     }
 
     public String getId() {
