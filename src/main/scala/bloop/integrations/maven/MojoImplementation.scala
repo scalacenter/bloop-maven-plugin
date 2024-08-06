@@ -277,7 +277,7 @@ object MojoImplementation {
         val `scala` =
           scalaContext.map{
             context =>
-              Config.Scala(scalaOrganization, mojo.getScalaArtifactID(), context.version().toString(), scalacArgs, allScalaJars, analysisOut, Some(compileSetup))
+              Config.Scala(scalaOrganization, mojo.getScalaArtifactID(), context.version().toString(), scalacArgs, allScalaJars, analysisOut, Some(compileSetup), None)
           }
         val javaHome = Some(abs(mojo.getJavaHome().getParentFile.getParentFile))
         val mainClass = if (launcher.getMainClass().isEmpty) None else Some(launcher.getMainClass())
