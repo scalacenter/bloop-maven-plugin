@@ -1,5 +1,5 @@
-name: release
-
+name: Release ${{ inputs.version }}
+ 
 on:
   workflow_dispatch:
     inputs:
@@ -21,20 +21,34 @@ jobs:
         distribution: 'temurin'
         java-version: '11'
         cache: 'maven'
-        server-id: central # Value of the distributionManagement/repository/id field of the pom.xml
-        server-username: MAVEN_USERNAME
-        server-password: MAVEN_CENTRAL_TOKEN
-        gpg-private-key: ${{ secrets.PGP_SECRET }}
-        gpg-passphrase: MAVEN_GPG_PASSPHRASE # env variable for GPG private key passphrase
-      env:
-        MAVEN_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
-        MAVEN_CENTRAL_TOKEN: ${{ secrets.SONATYPE_PASSWORD }}
-        MAVEN_GPG_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
+      #   server-id: central # Value of the distributionManagement/repository/id field of the pom.xml
+      #   server-username: MAVEN_USERNAME
+      #   server-password: MAVEN_CENTRAL_TOKEN
+      #   gpg-private-key: ${{ secrets.PGP_SECRET }}
+      #   gpg-passphrase: MAVEN_GPG_PASSPHRASE # env variable for GPG private key passphrase
+      # env:
+      #   MAVEN_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+      #   MAVEN_CENTRAL_TOKEN: ${{ secrets.SONATYPE_PASSWORD }}
+      #   MAVEN_GPG_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
 
     - name: Setup git profile
       run: |
         git config --global user.name "github-actions[bot]"
         git config --global user.email "123456+github-actions[bot]@users.noreply.github.com"
+
+    - name: Import GPG key manually
+      run: |
+        echo "${{ secrets.PGP_SECRET }}" | base64 -d | gpg --import --batch --no-tty
+        gpg --list-secret-keys
+      env:
+        GNUPGHOME: /home/runner/.gnupg
+
+    - name: Test GPG signing
+      run: |
+        echo "test message" | gpg --clearsign --batch --no-tty --pinentry-mode loopback
+      env:
+        GNUPGHOME: /home/runner/.gnupg
+        MAVEN_GPG_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
 
     - name: Publish to Apache Maven Central
       run: mvn clean -Darguments=-DskipTests release:prepare release:perform -DreleaseVersion=${{github.event.inputs.version}} -Prelease
@@ -42,4 +56,5 @@ jobs:
         MAVEN_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
         MAVEN_CENTRAL_TOKEN: ${{ secrets.SONATYPE_PASSWORD }}
         MAVEN_GPG_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
+        GNUPGHOME: /home/runner/.gnupg
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
