@@ -40,13 +40,16 @@ jobs:
     - name: Import GPG key manually
       run: |
         echo "${{ secrets.PGP_SECRET }}" | base64 -d | gpg --import --batch --no-tty
+        echo "allow-loopback-pinentry" >> /home/runner/.gnupg/gpg-agent.conf
+        gpgconf --kill gpg-agent
+        sleep 1
         gpg --list-secret-keys
       env:
         GNUPGHOME: /home/runner/.gnupg
 
     - name: Publish to Apache Maven Central
       run: |
-        export GPG_TTY=$(tty)
+        export GPG_TTY=$(tty) || export GPG_TTY=/dev/null
         mvn clean -Darguments=-DskipTests release:prepare release:perform -DreleaseVersion=${{github.event.inputs.version}} -Prelease
       env:
         MAVEN_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
