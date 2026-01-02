@@ -26,6 +26,10 @@ jobs:
         server-password: MAVEN_CENTRAL_TOKEN
         gpg-private-key: ${{ secrets.PGP_SECRET }}
         gpg-passphrase: MAVEN_GPG_PASSPHRASE # env variable for GPG private key passphrase
+      env:
+        MAVEN_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
+        MAVEN_CENTRAL_TOKEN: ${{ secrets.SONATYPE_PASSWORD }}
+        MAVEN_GPG_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
 
     - name: Setup git profile
       run: |
