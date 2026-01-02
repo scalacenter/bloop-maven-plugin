@@ -45,7 +45,7 @@ jobs:
         GNUPGHOME: /home/runner/.gnupg
 
     - name: Publish to Apache Maven Central
-      run: 
+      run: |
         export GPG_TTY=$(tty)
         mvn clean -Darguments=-DskipTests release:prepare release:perform -DreleaseVersion=${{github.event.inputs.version}} -Prelease
       env:
