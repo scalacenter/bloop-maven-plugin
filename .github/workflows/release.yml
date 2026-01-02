@@ -24,8 +24,8 @@ jobs:
         server-id: central # Value of the distributionManagement/repository/id field of the pom.xml
         server-username: MAVEN_USERNAME
         server-password: MAVEN_CENTRAL_TOKEN
-        gpg-private-key: ${{ secrets.PGP_SECRET }} # Value of the GPG private key to import
-        gpg-passphrase: ${{ secrets.PGP_PASSPHRASE }}   # env variable for GPG private key passphrase
+        gpg-private-key: "${{ secrets.PGP_SECRET }}\n"
+        gpg-passphrase: MAVEN_GPG_PASSPHRASE # env variable for GPG private key passphrase
 
     - name: Setup git profile
       run: |
