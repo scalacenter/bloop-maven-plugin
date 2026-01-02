@@ -34,7 +34,10 @@ jobs:
         git config --global user.email "123456+github-actions[bot]@users.noreply.github.com"
 
     - name: Publish to Apache Maven Central
-      run: mvn clean -Darguments=-DskipTests release:prepare release:perform -DreleaseVersion=${{github.event.inputs.version}} -Prelease
+      run: |
+       mvn clean install -DskipTests
+       mvn versions:set -DnewVersion=${{github.event.inputs.version}}
+       mvn clean deploy -DskipTests -Prelease
       env:
         MAVEN_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
         MAVEN_CENTRAL_TOKEN: ${{ secrets.SONATYPE_PASSWORD }}
