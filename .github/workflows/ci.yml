@@ -14,8 +14,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        java: [ '8', '17' ]
-        os: [ 'ubuntu-latest', 'macOS-13' ]
+        java: [ '11', '17' ]
+        os: [ 'ubuntu-latest', 'macOS-15' ]
 
     steps:
       - name: checkout the repo
