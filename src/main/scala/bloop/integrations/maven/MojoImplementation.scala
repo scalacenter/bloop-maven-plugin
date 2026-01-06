@@ -152,7 +152,7 @@ object MojoImplementation {
       log.info(s"Dependency $dep, $matchingArtifacts")
       matchingArtifacts
         .collect {
-          case artifact if artifact.getType == "test-jar" => dep.getArtifactId + "-test"
+          case artifact if artifact.getType == "test-jar" => dep.getArtifactId + "-test-scope"
         }
         .toList
         .appended(dep.getArtifactId)
@@ -200,7 +200,11 @@ object MojoImplementation {
         launcher: Option[AppLauncher],
         configuration: String
     ): Unit = {
-      val suffix = if (configuration == "compile") "" else s"-$configuration"
+      val suffix = configuration match {
+        case "compile" => "-compile"
+        case "test" => "-test-scope"
+        case _ => s"-$configuration"
+      }
       val name = project.getArtifactId() + suffix
       val build = project.getBuild()
       val baseDirectory = abs(project.getBasedir())
@@ -293,6 +297,12 @@ object MojoImplementation {
       log.info(s"Generated $finalTarget")
       log.debug(s"Configuration to be serialized:\n$config")
       bloop.config.write(config, configTarget.toPath)
+
+      log.info(s"Starting to write configuration for project: ${project.getArtifactId()} with configuration: $configuration")
+      log.debug(s"Source directories: ${sourceDirs0.map(_.getAbsolutePath).mkString(", ")}")
+      log.debug(s"Classpath: ${classpath0().asScala.mkString(", ")}")
+      log.debug(s"Resources: ${resources0.asScala.mkString(", ")}")
+      log.debug(s"Output directory: ${classesDir0.getAbsolutePath}")
     }
 
     writeConfig(
@@ -354,7 +364,7 @@ object MojoImplementation {
       throw new IllegalArgumentException(s"Could not resolve $artifact")
     Config.Module(
       organization = artifact.getGroupId(),
-      name = artifact.getArtifactId(),
+      name = if (artifact.getType == "test-jar") artifact.getArtifactId + "-test-scope" else artifact.getArtifactId,
       version = artifact.getVersion(),
       configurations = None,
       Config.Artifact(

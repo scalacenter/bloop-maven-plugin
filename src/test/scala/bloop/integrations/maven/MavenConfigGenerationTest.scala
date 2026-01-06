@@ -261,6 +261,19 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
     }
   }
 
+  @Test
+  def testFallbackNamingForTestScope() = {
+    check(
+      "multi_dependency/pom.xml",
+      submodules = List("multi_dependency/module1/pom.xml", "multi_dependency/module2/pom.xml")
+    ) {
+      case (configFile, projectName, List(module1, module2)) =>
+        assert(configFile.project.name.endsWith("-compile"))
+        assert(module1.project.name.endsWith("-compile"))
+        assert(module2.project.name.endsWith("-compile"))
+    }
+  }
+
   private def check(testProject: String, submodules: List[String] = Nil)(
       checking: (Config.File, String, List[Config.File]) => Unit
   ): Unit = {
@@ -308,12 +321,21 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
       val projectPath = outFile.getParent()
       val projectName = projectPath.toFile().getName()
       val bloopDir = projectPath.resolve(".bloop")
-      val projectFile = bloopDir.resolve(s"${projectName}.json")
+      val projectFile = bloopDir.resolve(s"${projectName}-compile.json")
+
+      // Log the contents of the .bloop directory for debugging
+      if (bloopDir.toFile().exists()) {
+        println(".bloop directory contents:")
+        bloopDir.toFile().listFiles().foreach(file => println(file.getName))
+      } else {
+        println(".bloop directory does not exist!")
+      }
+
       val configFile = readValidBloopConfig(projectFile.toFile())
 
       val subProjects = submodules.map { mod =>
         val subProjectName = tempDir.resolve(mod).getParent().toFile().getName()
-        val subProjectFile = bloopDir.resolve(s"${subProjectName}.json")
+        val subProjectFile = bloopDir.resolve(s"${subProjectName}-compile.json")
         readValidBloopConfig(subProjectFile.toFile())
       }
       checking(configFile, projectName, subProjects)
@@ -345,7 +367,7 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
       val processBuilder = new ProcessBuilder()
       val out = new StringBuilder()
       processBuilder.directory(cwd)
-      processBuilder.command(cmd: _*);
+      processBuilder.command(cmd: _*)
       var process = processBuilder.start()
 
       val reader =
@@ -354,10 +376,33 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
       var line = reader.readLine()
       while (line != null) {
         out.append(line + "\n")
+        println(line) // Added logging for debugging
         line = reader.readLine()
       }
+
+      val exitCode = process.waitFor()
+      if (exitCode != 0) {
+        println("Command failed with exit code: " + exitCode)
+        println("Error output: " + lastError.toString())
+      }
+
       out.toString()
     }
+  }
+
+  def exec(command: String, cwd: File): Unit = {
+    println(s"Executing command: $command in directory: ${cwd.getAbsolutePath}")
+    val process = new ProcessBuilder(command.split(" "): _*)
+      .directory(cwd)
+      .redirectErrorStream(true)
+      .start()
+
+    val output = scala.io.Source.fromInputStream(process.getInputStream).mkString
+    println(s"Command output: \n$output")
+
+    val exitCode = process.waitFor()
+    println(s"Command exited with code: $exitCode")
+    assert(exitCode == 0, s"Command failed with exit code $exitCode. Output: \n$output")
   }
 
 }
