@@ -218,7 +218,7 @@ object MojoImplementation {
       }
       val allArtifacts = if (hasScalaLibrary) artifacts else artifacts ++ libraryAndDependencies
       val isJar = Set("jar", "test-jar")
-      val modules =
+      val modules0 =
         allArtifacts.collect {
           case art: Artifact if isJar(art.getType()) && isNotReactorProjectArtifact(art) =>
             if (art.getArtifactId() == "scala-library")
@@ -241,7 +241,35 @@ object MojoImplementation {
             }
             artifactToConfigModule(art, project, session)
         }
-      val resolution = Some(Config.Resolution(modules.toList))
+
+      val (modules, extraClasspath) = {
+        val hasJunit = allArtifacts.exists(a => a.getGroupId == "junit" && a.getArtifactId == "junit")
+        val hasJunitInterface = allArtifacts.exists(a => a.getArtifactId == "junit-interface")
+        if (hasJunit && !hasJunitInterface && configuration == "test") {
+          val junitInterfaceVersion = "0.13.3"
+          val artifact = new org.apache.maven.artifact.DefaultArtifact(
+            "com.github.sbt",
+            "junit-interface",
+            junitInterfaceVersion,
+            "test",
+            "jar",
+            "",
+            new org.apache.maven.artifact.handler.DefaultArtifactHandler("jar")
+          )
+          resolveArtifact(artifact) match {
+            case Some(file) =>
+              artifact.setFile(file)
+              val module = artifactToConfigModule(artifact, project, session)
+              (modules0.toList :+ module, List(file.toPath))
+            case None =>
+              (modules0.toList, Nil)
+          }
+        } else {
+          (modules0.toList, Nil)
+        }
+      }
+
+      val resolution = Some(Config.Resolution(modules))
 
       val classpath = {
         val projectDependencies = dependencies.flatMap { d =>
@@ -256,7 +284,7 @@ object MojoImplementation {
 
         val fullClasspath =
           if (hasScalaLibrary) cp else cp ++ libraryAndDependencies.map(_.getFile().toPath())
-        (projectDependencies.map(u => abs(new File(u))) ++ fullClasspath).toList
+        (projectDependencies.map(u => abs(new File(u))) ++ fullClasspath ++ extraClasspath).toList
       }
 
       val tags = if (configuration == "test") List(Tag.Test) else List(Tag.Library)

@@ -261,6 +261,26 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
     }
   }
 
+  @Test
+  def junitSupport() = {
+    check("junit_project/pom.xml") { (configFile, projectName, subprojects) =>
+      assert(subprojects.isEmpty)
+      
+      // Read the test configuration file
+      val testConfigFile = readValidBloopConfig(configFile.project.directory.resolve(".bloop").resolve(s"$projectName-test.json").toFile())
+      
+      // Check if junit-interface is present in the resolution modules of the test config
+      val resolutionModules = testConfigFile.project.resolution.get.modules
+      val hasJunitInterface = resolutionModules.exists(_.name.contains("junit-interface"))
+      
+      assertTrue("junit-interface should be present in test config when junit is used", hasJunitInterface)
+      
+      // Also check classpath
+      val hasJunitInterfaceInClasspath = testConfigFile.project.classpath.exists(_.toString.contains("junit-interface"))
+      assertTrue("junit-interface should be present in test classpath when junit is used", hasJunitInterfaceInClasspath)
+    }
+  }
+
   private def check(testProject: String, submodules: List[String] = Nil)(
       checking: (Config.File, String, List[Config.File]) => Unit
   ): Unit = {
