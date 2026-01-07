@@ -267,7 +267,12 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
       "multi_dependency/pom.xml",
       submodules = List("multi_dependency/module1/pom.xml", "multi_dependency/module2/pom.xml")
     ) {
-      case (configFile, projectName, List(module1, module2)) =>
+      case (configFile, projectName, submodulesList) =>
+        val (module1: Config.File, module2: Config.File) = submodulesList match {
+          case List(m1, m2) => (m1, m2)
+          case _ => fail(s"Expected 2 submodules, but got ${submodulesList.size}")
+        }
+        
         // Standard naming should be preserved when no collision exists
         assert(!configFile.project.name.contains("-compile"))
         assert(!module1.project.name.contains("-compile"))
