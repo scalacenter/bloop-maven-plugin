@@ -276,6 +276,22 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
         // Note: To test actual collision, we would need to construct a project structure
         // where a submodule name conflicts with the test suffix of another module.
         // For now, we verify that the default behavior is correct (no suffixes).
+  def junitSupport() = {
+    check("junit_project/pom.xml") { (configFile, projectName, subprojects) =>
+      assert(subprojects.isEmpty)
+      
+      // Read the test configuration file
+      val testConfigFile = readValidBloopConfig(configFile.project.directory.resolve(".bloop").resolve(s"$projectName-test.json").toFile())
+      
+      // Check if junit-interface is present in the resolution modules of the test config
+      val resolutionModules = testConfigFile.project.resolution.get.modules
+      val hasJunitInterface = resolutionModules.exists(_.name.contains("junit-interface"))
+      
+      assertTrue("junit-interface should be present in test config when junit is used", hasJunitInterface)
+      
+      // Also check classpath
+      val hasJunitInterfaceInClasspath = testConfigFile.project.classpath.exists(_.toString.contains("junit-interface"))
+      assertTrue("junit-interface should be present in test classpath when junit is used", hasJunitInterfaceInClasspath)
     }
   }
 
