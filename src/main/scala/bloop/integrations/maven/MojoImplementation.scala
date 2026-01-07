@@ -128,6 +128,19 @@ object MojoImplementation {
       }
     }
 
+    val reactorArtifactIds = mojo.getReactorProjects().asScala.map(_.getArtifactId).toSet
+
+    def getBloopName(artifactId: String, configuration: String): String = {
+      configuration match {
+        case "test" =>
+          val defaultName = s"$artifactId-test"
+          if (reactorArtifactIds.contains(defaultName)) s"$artifactId-test-scope"
+          else defaultName
+        case "compile" => artifactId
+        case _ => s"$artifactId-$configuration"
+      }
+    }
+
     val reactorProjectsSet = mojo
       .getReactorProjects()
       .asScala
@@ -152,7 +165,7 @@ object MojoImplementation {
       log.info(s"Dependency $dep, $matchingArtifacts")
       matchingArtifacts
         .collect {
-          case artifact if artifact.getType == "test-jar" => dep.getArtifactId + "-test-scope"
+          case artifact if artifact.getType == "test-jar" => getBloopName(dep.getArtifactId, "test")
         }
         .toList
         .appended(dep.getArtifactId)
@@ -200,12 +213,7 @@ object MojoImplementation {
         launcher: Option[AppLauncher],
         configuration: String
     ): Unit = {
-      val suffix = configuration match {
-        case "compile" => "-compile"
-        case "test" => "-test-scope"
-        case _ => s"-$configuration"
-      }
-      val name = project.getArtifactId() + suffix
+      val name = getBloopName(project.getArtifactId(), configuration)
       val build = project.getBuild()
       val baseDirectory = abs(project.getBasedir())
       val out = baseDirectory.resolve("target")
@@ -243,7 +251,7 @@ object MojoImplementation {
             if (mojo.shouldDownloadSources()) {
               resolveArtifact(art, sources = true)
             }
-            artifactToConfigModule(art, project, session)
+            artifactToConfigModule(art, project, session, reactorArtifactIds)
         }
       val resolution = Some(Config.Resolution(modules.toList))
 
@@ -338,7 +346,8 @@ object MojoImplementation {
   private def artifactToConfigModule(
       artifact: Artifact,
       project: MavenProject,
-      session: MavenSession
+      session: MavenSession,
+      reactorArtifactIds: Set[String]
   ): Config.Module = {
     val base = session.getLocalRepository().getBasedir()
     val artifactRelativePath = session.getLocalRepository().pathOf(artifact)
@@ -362,9 +371,18 @@ object MojoImplementation {
     }
     if (artifact.getFile() == null)
       throw new IllegalArgumentException(s"Could not resolve $artifact")
+    
+    val name = if (artifact.getType == "test-jar") {
+      val defaultName = artifact.getArtifactId + "-test"
+      if (reactorArtifactIds.contains(defaultName)) artifact.getArtifactId + "-test-scope"
+      else defaultName
+    } else {
+      artifact.getArtifactId
+    }
+
     Config.Module(
       organization = artifact.getGroupId(),
-      name = if (artifact.getType == "test-jar") artifact.getArtifactId + "-test-scope" else artifact.getArtifactId,
+      name = name,
       version = artifact.getVersion(),
       configurations = None,
       Config.Artifact(

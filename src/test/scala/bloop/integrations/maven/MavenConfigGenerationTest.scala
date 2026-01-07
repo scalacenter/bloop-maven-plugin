@@ -268,9 +268,14 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
       submodules = List("multi_dependency/module1/pom.xml", "multi_dependency/module2/pom.xml")
     ) {
       case (configFile, projectName, List(module1, module2)) =>
-        assert(configFile.project.name.endsWith("-compile"))
-        assert(module1.project.name.endsWith("-compile"))
-        assert(module2.project.name.endsWith("-compile"))
+        // Standard naming should be preserved when no collision exists
+        assert(!configFile.project.name.contains("-compile"))
+        assert(!module1.project.name.contains("-compile"))
+        assert(!module2.project.name.contains("-compile"))
+        
+        // Note: To test actual collision, we would need to construct a project structure
+        // where a submodule name conflicts with the test suffix of another module.
+        // For now, we verify that the default behavior is correct (no suffixes).
     }
   }
 
@@ -321,21 +326,13 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
       val projectPath = outFile.getParent()
       val projectName = projectPath.toFile().getName()
       val bloopDir = projectPath.resolve(".bloop")
-      val projectFile = bloopDir.resolve(s"${projectName}-compile.json")
-
-      // Log the contents of the .bloop directory for debugging
-      if (bloopDir.toFile().exists()) {
-        println(".bloop directory contents:")
-        bloopDir.toFile().listFiles().foreach(file => println(file.getName))
-      } else {
-        println(".bloop directory does not exist!")
-      }
+      val projectFile = bloopDir.resolve(s"${projectName}.json")
 
       val configFile = readValidBloopConfig(projectFile.toFile())
 
       val subProjects = submodules.map { mod =>
         val subProjectName = tempDir.resolve(mod).getParent().toFile().getName()
-        val subProjectFile = bloopDir.resolve(s"${subProjectName}-compile.json")
+        val subProjectFile = bloopDir.resolve(s"${subProjectName}.json")
         readValidBloopConfig(subProjectFile.toFile())
       }
       checking(configFile, projectName, subProjects)
@@ -390,19 +387,6 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
     }
   }
 
-  def exec(command: String, cwd: File): Unit = {
-    println(s"Executing command: $command in directory: ${cwd.getAbsolutePath}")
-    val process = new ProcessBuilder(command.split(" "): _*)
-      .directory(cwd)
-      .redirectErrorStream(true)
-      .start()
 
-    val output = scala.io.Source.fromInputStream(process.getInputStream).mkString
-    println(s"Command output: \n$output")
-
-    val exitCode = process.waitFor()
-    println(s"Command exited with code: $exitCode")
-    assert(exitCode == 0, s"Command failed with exit code $exitCode. Output: \n$output")
-  }
 
 }
