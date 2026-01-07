@@ -218,7 +218,7 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
       assert(hasCompileClasspathEntryName(configFile, "scala-library"))
 
       assert(hasTag(configFile, Tag.Library))
-      val testJar = configFile.project.resolution.get.modules.find(_.name == "spark-tags_2.13")
+      val testJar = configFile.project.resolution.get.modules.find(_.name == "spark-tags_2.13-test")
       assert(
         testJar.forall(
           _.artifacts.exists(e =>
@@ -281,6 +281,10 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
         // Note: To test actual collision, we would need to construct a project structure
         // where a submodule name conflicts with the test suffix of another module.
         // For now, we verify that the default behavior is correct (no suffixes).
+    }
+  }
+
+  @Test
   def junitSupport() = {
     check("junit_project/pom.xml") { (configFile, projectName, subprojects) =>
       assert(subprojects.isEmpty)

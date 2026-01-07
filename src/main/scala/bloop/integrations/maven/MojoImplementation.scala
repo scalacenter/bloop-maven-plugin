@@ -271,7 +271,7 @@ object MojoImplementation {
           resolveArtifact(artifact) match {
             case Some(file) =>
               artifact.setFile(file)
-              val module = artifactToConfigModule(artifact, project, session)
+              val module = artifactToConfigModule(artifact, project, session, reactorArtifactIds)
               (modules0.toList :+ module, List(file.toPath))
             case None =>
               (modules0.toList, Nil)
