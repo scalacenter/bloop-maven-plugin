@@ -8,7 +8,6 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 
-import scala.sys.process.ProcessLogger
 import scala.util.Try
 import scala.util.control.NonFatal
 
@@ -281,12 +280,10 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
     }
   }
 
-  private def check(testProject: String, submodules: List[String] = Nil, extraFiles: List[String] = Nil, extraContent: Map[String, String] = Map.empty)(
+  private def check(testProject: String, submodules: List[String] = Nil, extraContent: Map[String, String] = Map.empty)(
       checking: (Config.File, String, List[Config.File]) => Unit
   ): Unit = {
     println(s"Checking $testProject")
-    def nameFromDirectory(projectString: String) =
-      Paths.get(projectString).getParent().getFileName().toString()
     val tempDir = Files.createTempDirectory("mavenBloop")
     val outFile = copyFromResource(tempDir, testProject)
     extraContent.foreach { case (relativePath, content) =>
@@ -295,12 +292,8 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
       Files.write(p, content.getBytes("UTF-8"))
     }
     submodules.foreach(copyFromResource(tempDir, _))
-    extraFiles.foreach(copyFromResource(tempDir, _))
     val wrapperJar = copyFromResource(tempDir, s"maven-wrapper.jar")
-    val wrapperPropertiesFile = copyFromResource(tempDir, s"maven-wrapper.properties")
-
-    //    val all = Files.list(tempDir).collect(Collectors.toList())
-    import sys.process._
+    copyFromResource(tempDir, s"maven-wrapper.properties")
 
     val javaHome = Paths.get(System.getProperty("java.home"))
     val javaArgs = List[String](
@@ -366,8 +359,6 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
 
   private def exec(cmd: Seq[String], cwd: File): Try[String] = {
     Try {
-      val lastError = new StringBuilder
-      val swallowStderr = ProcessLogger(_ => (), err => { lastError.append(err); () })
       val processBuilder = new ProcessBuilder()
       val out = new StringBuilder()
       processBuilder.directory(cwd)
