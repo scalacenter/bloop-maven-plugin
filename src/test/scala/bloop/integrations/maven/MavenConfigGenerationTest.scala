@@ -398,7 +398,6 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
       var line = reader.readLine()
       while (line != null) {
         out.append(line + "\n")
-        println(line) // Added logging for debugging
         line = reader.readLine()
       }
 

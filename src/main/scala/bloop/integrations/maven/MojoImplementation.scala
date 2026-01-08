@@ -132,12 +132,11 @@ object MojoImplementation {
 
     def getBloopName(artifactId: String, configuration: String): String = {
       configuration match {
-        case "test" =>
-          val defaultName = s"$artifactId-test"
-          if (reactorArtifactIds.contains(defaultName)) s"$artifactId-test-scope"
-          else defaultName
         case "compile" => artifactId
-        case _ => s"$artifactId-$configuration"
+        case _ =>
+          val defaultName = s"$artifactId-$configuration"
+          if (reactorArtifactIds.contains(defaultName)) s"$artifactId-$configuration-scope"
+          else defaultName
       }
     }
 
@@ -399,18 +398,9 @@ object MojoImplementation {
     }
     if (artifact.getFile() == null)
       throw new IllegalArgumentException(s"Could not resolve $artifact")
-    
-    val name = if (artifact.getType == "test-jar") {
-      val defaultName = artifact.getArtifactId + "-test"
-      if (reactorArtifactIds.contains(defaultName)) artifact.getArtifactId + "-test-scope"
-      else defaultName
-    } else {
-      artifact.getArtifactId
-    }
-
     Config.Module(
       organization = artifact.getGroupId(),
-      name = name,
+      name = artifact.getArtifactId(),
       version = artifact.getVersion(),
       configurations = None,
       Config.Artifact(
