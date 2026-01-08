@@ -281,7 +281,7 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
     }
   }
 
-  private def check(testProject: String, submodules: List[String] = Nil)(
+  private def check(testProject: String, submodules: List[String] = Nil, extraFiles: List[String] = Nil, extraContent: Map[String, String] = Map.empty)(
       checking: (Config.File, String, List[Config.File]) => Unit
   ): Unit = {
     println(s"Checking $testProject")
@@ -289,7 +289,13 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
       Paths.get(projectString).getParent().getFileName().toString()
     val tempDir = Files.createTempDirectory("mavenBloop")
     val outFile = copyFromResource(tempDir, testProject)
+    extraContent.foreach { case (relativePath, content) =>
+      val p = tempDir.resolve(relativePath)
+      Files.createDirectories(p.getParent)
+      Files.write(p, content.getBytes("UTF-8"))
+    }
     submodules.foreach(copyFromResource(tempDir, _))
+    extraFiles.foreach(copyFromResource(tempDir, _))
     val wrapperJar = copyFromResource(tempDir, s"maven-wrapper.jar")
     val wrapperPropertiesFile = copyFromResource(tempDir, s"maven-wrapper.properties")
 
@@ -377,6 +383,30 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
         line = reader.readLine()
       }
       out.toString()
+    }
+  }
+
+
+
+  @Test
+  def issue85() = {
+    check(
+      "issue_85/pom.xml",
+      extraContent = Map(
+        "issue_85/LICENSE" -> "LICENSE CONTENT",
+        "issue_85/NOTICE" -> "NOTICE CONTENT"
+      )
+    ) { (configFile, projectName, subprojects) =>
+      assert(subprojects.isEmpty)
+      val resources = configFile.project.resources.getOrElse(Nil)
+      val license = resources.find(_.toString.endsWith("LICENSE"))
+      val notice = resources.find(_.toString.endsWith("NOTICE"))
+      assert(license.isDefined, "LICENSE file should be included in resources")
+      assert(notice.isDefined, "NOTICE file should be included in resources")
+
+      val baseDirectory = configFile.project.directory.toAbsolutePath
+      val hasBaseDir = resources.exists(_.toAbsolutePath == baseDirectory)
+      assert(!hasBaseDir, s"Base directory $baseDirectory should NOT be in resources when includes are specified")
     }
   }
 
