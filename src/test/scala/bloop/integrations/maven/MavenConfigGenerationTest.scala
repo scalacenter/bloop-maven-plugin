@@ -8,7 +8,6 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.nio.file.StandardCopyOption
 
-import scala.sys.process.ProcessLogger
 import scala.util.Try
 import scala.util.control.NonFatal
 
@@ -281,20 +280,20 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
     }
   }
 
-  private def check(testProject: String, submodules: List[String] = Nil)(
+  private def check(testProject: String, submodules: List[String] = Nil, extraContent: Map[String, String] = Map.empty)(
       checking: (Config.File, String, List[Config.File]) => Unit
   ): Unit = {
     println(s"Checking $testProject")
-    def nameFromDirectory(projectString: String) =
-      Paths.get(projectString).getParent().getFileName().toString()
     val tempDir = Files.createTempDirectory("mavenBloop")
     val outFile = copyFromResource(tempDir, testProject)
+    extraContent.foreach { case (relativePath, content) =>
+      val p = tempDir.resolve(relativePath)
+      Files.createDirectories(p.getParent)
+      Files.write(p, content.getBytes("UTF-8"))
+    }
     submodules.foreach(copyFromResource(tempDir, _))
     val wrapperJar = copyFromResource(tempDir, s"maven-wrapper.jar")
-    val wrapperPropertiesFile = copyFromResource(tempDir, s"maven-wrapper.properties")
-
-    //    val all = Files.list(tempDir).collect(Collectors.toList())
-    import sys.process._
+    copyFromResource(tempDir, s"maven-wrapper.properties")
 
     val javaHome = Paths.get(System.getProperty("java.home"))
     val javaArgs = List[String](
@@ -360,8 +359,6 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
 
   private def exec(cmd: Seq[String], cwd: File): Try[String] = {
     Try {
-      val lastError = new StringBuilder
-      val swallowStderr = ProcessLogger(_ => (), err => { lastError.append(err); () })
       val processBuilder = new ProcessBuilder()
       val out = new StringBuilder()
       processBuilder.directory(cwd)
@@ -377,6 +374,30 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
         line = reader.readLine()
       }
       out.toString()
+    }
+  }
+
+
+
+  @Test
+  def issue85() = {
+    check(
+      "issue_85/pom.xml",
+      extraContent = Map(
+        "issue_85/LICENSE" -> "LICENSE CONTENT",
+        "issue_85/NOTICE" -> "NOTICE CONTENT"
+      )
+    ) { (configFile, projectName, subprojects) =>
+      assert(subprojects.isEmpty)
+      val resources = configFile.project.resources.getOrElse(Nil)
+      val license = resources.find(_.toString.endsWith("LICENSE"))
+      val notice = resources.find(_.toString.endsWith("NOTICE"))
+      assert(license.isDefined, "LICENSE file should be included in resources")
+      assert(notice.isDefined, "NOTICE file should be included in resources")
+
+      val baseDirectory = configFile.project.directory.toAbsolutePath
+      val hasBaseDir = resources.exists(_.toAbsolutePath == baseDirectory)
+      assert(!hasBaseDir, s"Base directory $baseDirectory should NOT be in resources when includes are specified")
     }
   }
 
