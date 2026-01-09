@@ -128,7 +128,7 @@ object MojoImplementation {
       }
     }
 
-    val reactorArtifactIds = mojo.getReactorProjects().asScala.map(_.getArtifactId).toSet
+    val reactorArtifactIds = session.getProjects().asScala.map(_.getArtifactId).toSet
 
     def getBloopName(artifactId: String, configuration: String): String = {
       configuration match {
@@ -250,7 +250,7 @@ object MojoImplementation {
             if (mojo.shouldDownloadSources()) {
               resolveArtifact(art, sources = true)
             }
-            artifactToConfigModule(art, project, session, reactorArtifactIds)
+            artifactToConfigModule(art, project, session)
         }
 
       val (modules, extraClasspath) = {
@@ -270,7 +270,7 @@ object MojoImplementation {
           resolveArtifact(artifact) match {
             case Some(file) =>
               artifact.setFile(file)
-              val module = artifactToConfigModule(artifact, project, session, reactorArtifactIds)
+              val module = artifactToConfigModule(artifact, project, session)
               (modules0.toList :+ module, List(file.toPath))
             case None =>
               (modules0.toList, Nil)
@@ -373,8 +373,7 @@ object MojoImplementation {
   private def artifactToConfigModule(
       artifact: Artifact,
       project: MavenProject,
-      session: MavenSession,
-      reactorArtifactIds: Set[String]
+      session: MavenSession
   ): Config.Module = {
     val base = session.getLocalRepository().getBasedir()
     val artifactRelativePath = session.getLocalRepository().pathOf(artifact)

@@ -204,6 +204,45 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
   }
 
   @Test
+  def conflictingSubmodules() = {
+    check(
+      "conflicting_modules/pom.xml",
+      submodules = List(
+        "conflicting_modules/module1/pom.xml",
+        "conflicting_modules/module1-test/pom.xml"
+      )
+    ) {
+      case (configFile, projectName, List(module1, module2)) =>
+        // module1 is "module1"
+        // module2 is "module1-test"
+        
+        // module1's test configuration should be renamed to avoid conflict with module2
+        // Default would be "module1-test", but "module1-test" exists as a reactor artifact (module2)
+        // So it should be "module1-test-scope"
+        assertEquals("module1", module1.project.name)
+        
+        // We need to check the test configuration name for module1.
+        // check() function loads the "compile" configuration (default expectation in this test suite assumption?)
+        // Actually check() loads the config based on the project file name.
+        // module1 comes from "conflicting_modules/module1/pom.xml" -> parent dir is "module1".
+        // The bloop file loaded is "module1.json".
+        
+        // Let's check the test config of module1
+        val module1TestConfigPath = configFile.project.directory.resolve(".bloop").resolve("module1-test-scope.json")
+        assertTrue(s"Test config for module1 should be renamed to module1-test-scope.json", Files.exists(module1TestConfigPath))
+        
+        val module1TestConfig = readValidBloopConfig(module1TestConfigPath.toFile())
+        assertEquals("module1-test-scope", module1TestConfig.project.name)
+
+        // module2 should start with module1-test
+        assertEquals("module1-test", module2.project.name)
+
+      case _ =>
+        fail("Conflicting modules test should have 2 submodules")
+    }
+  }
+
+  @Test
   def dependencyTestJars() = {
     check("test_jars/pom.xml") { (configFile, projectName, subprojects) =>
       assert(subprojects.isEmpty)
@@ -218,7 +257,7 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
       assert(hasCompileClasspathEntryName(configFile, "scala-library"))
 
       assert(hasTag(configFile, Tag.Library))
-      val testJar = configFile.project.resolution.get.modules.find(_.name == "spark-tags_2.13-test")
+      val testJar = configFile.project.resolution.get.modules.find(_.name == "spark-tags_2.13")
       assert(
         testJar.forall(
           _.artifacts.exists(e =>
