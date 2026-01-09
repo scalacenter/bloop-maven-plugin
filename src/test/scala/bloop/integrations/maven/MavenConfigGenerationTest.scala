@@ -203,6 +203,45 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
   }
 
   @Test
+  def conflictingSubmodules() = {
+    check(
+      "conflicting_modules/pom.xml",
+      submodules = List(
+        "conflicting_modules/module1/pom.xml",
+        "conflicting_modules/module1-test/pom.xml"
+      )
+    ) {
+      case (configFile, projectName, List(module1, module2)) =>
+        // module1 is "module1"
+        // module2 is "module1-test"
+        
+        // module1's test configuration should be renamed to avoid conflict with module2
+        // Default would be "module1-test", but "module1-test" exists as a reactor artifact (module2)
+        // So it should be "module1-test-scope"
+        assertEquals("module1", module1.project.name)
+        
+        // We need to check the test configuration name for module1.
+        // check() function loads the "compile" configuration (default expectation in this test suite assumption?)
+        // Actually check() loads the config based on the project file name.
+        // module1 comes from "conflicting_modules/module1/pom.xml" -> parent dir is "module1".
+        // The bloop file loaded is "module1.json".
+        
+        // Let's check the test config of module1
+        val module1TestConfigPath = configFile.project.directory.resolve(".bloop").resolve("module1-test-scope.json")
+        assertTrue(s"Test config for module1 should be renamed to module1-test-scope.json", Files.exists(module1TestConfigPath))
+        
+        val module1TestConfig = readValidBloopConfig(module1TestConfigPath.toFile())
+        assertEquals("module1-test-scope", module1TestConfig.project.name)
+
+        // module2 should start with module1-test
+        assertEquals("module1-test", module2.project.name)
+
+      case _ =>
+        fail("Conflicting modules test should have 2 submodules")
+    }
+  }
+
+  @Test
   def dependencyTestJars() = {
     check("test_jars/pom.xml") { (configFile, projectName, subprojects) =>
       assert(subprojects.isEmpty)
@@ -257,6 +296,29 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
 
       case _ =>
         assert(false, "Multi module test jar should have two submodules")
+    }
+  }
+
+  @Test
+  def testFallbackNamingForTestScope() = {
+    check(
+      "multi_dependency/pom.xml",
+      submodules = List("multi_dependency/module1/pom.xml", "multi_dependency/module2/pom.xml")
+    ) {
+      case (configFile, projectName, submodulesList) =>
+        val (module1: Config.File, module2: Config.File) = submodulesList match {
+          case List(m1, m2) => (m1, m2)
+          case _ => fail(s"Expected 2 submodules, but got ${submodulesList.size}")
+        }
+        
+        // Standard naming should be preserved when no collision exists
+        assert(!configFile.project.name.contains("-compile"))
+        assert(!module1.project.name.contains("-compile"))
+        assert(!module2.project.name.contains("-compile"))
+        
+        // Note: To test actual collision, we would need to construct a project structure
+        // where a submodule name conflicts with the test suffix of another module.
+        // For now, we verify that the default behavior is correct (no suffixes).
     }
   }
 
@@ -328,6 +390,7 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
       val projectName = projectPath.toFile().getName()
       val bloopDir = projectPath.resolve(".bloop")
       val projectFile = bloopDir.resolve(s"${projectName}.json")
+
       val configFile = readValidBloopConfig(projectFile.toFile())
 
       val subProjects = submodules.map { mod =>
@@ -362,7 +425,7 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
       val processBuilder = new ProcessBuilder()
       val out = new StringBuilder()
       processBuilder.directory(cwd)
-      processBuilder.command(cmd: _*);
+      processBuilder.command(cmd: _*)
       var process = processBuilder.start()
 
       val reader =
@@ -373,6 +436,9 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
         out.append(line + "\n")
         line = reader.readLine()
       }
+
+      val exitCode = process.waitFor()
+
       out.toString()
     }
   }

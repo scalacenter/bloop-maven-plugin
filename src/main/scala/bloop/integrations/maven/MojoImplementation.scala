@@ -129,6 +129,18 @@ object MojoImplementation {
       }
     }
 
+    val reactorArtifactIds = session.getProjects().asScala.map(_.getArtifactId).toSet
+
+    def getBloopName(artifactId: String, configuration: String): String = {
+      configuration match {
+        case "compile" => artifactId
+        case _ =>
+          val defaultName = s"$artifactId-$configuration"
+          if (reactorArtifactIds.contains(defaultName)) s"$artifactId-$configuration-scope"
+          else defaultName
+      }
+    }
+
     val reactorProjectsSet = mojo
       .getReactorProjects()
       .asScala
@@ -153,7 +165,7 @@ object MojoImplementation {
       log.info(s"Dependency $dep, $matchingArtifacts")
       matchingArtifacts
         .collect {
-          case artifact if artifact.getType == "test-jar" => dep.getArtifactId + "-test"
+          case artifact if artifact.getType == "test-jar" => getBloopName(dep.getArtifactId, "test")
         }
         .toList
         .appended(dep.getArtifactId)
@@ -201,8 +213,7 @@ object MojoImplementation {
         launcher: Option[AppLauncher],
         configuration: String
     ): Unit = {
-      val suffix = if (configuration == "compile") "" else s"-$configuration"
-      val name = project.getArtifactId() + suffix
+      val name = getBloopName(project.getArtifactId(), configuration)
       val build = project.getBuild()
       val baseDirectory = abs(project.getBasedir())
       val out = baseDirectory.resolve("target")
@@ -335,6 +346,12 @@ object MojoImplementation {
       log.info(s"Generated $finalTarget")
       log.debug(s"Configuration to be serialized:\n$config")
       bloop.config.write(config, configTarget.toPath)
+
+      log.info(s"Starting to write configuration for project: ${project.getArtifactId()} with configuration: $configuration")
+      log.debug(s"Source directories: ${sourceDirs0.map(_.getAbsolutePath).mkString(", ")}")
+      log.debug(s"Classpath: ${classpath0().asScala.mkString(", ")}")
+      log.debug(s"Resources: ${resources0.asScala.mkString(", ")}")
+      log.debug(s"Output directory: ${classesDir0.getAbsolutePath}")
     }
 
     writeConfig(
