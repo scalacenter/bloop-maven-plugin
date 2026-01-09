@@ -20,6 +20,7 @@ import org.apache.maven.plugin.MojoExecution
 import org.apache.maven.plugin.logging.Log
 import org.apache.maven.project.MavenProject
 import org.codehaus.plexus.util.xml.Xpp3Dom
+import org.codehaus.plexus.util.DirectoryScanner
 import org.eclipse.aether.artifact.DefaultArtifact
 import org.eclipse.aether.artifact.DefaultArtifactType
 import org.eclipse.aether.resolution.ArtifactRequest
@@ -318,8 +319,21 @@ object MojoImplementation {
         val jvmArgs = launcher.map(_.getJvmArgs.toList).getOrElse(List.empty)
         val mainClass = launcher.map(_.getMainClass).filter(_.nonEmpty)
         val platform = Some(Config.Platform.Jvm(Config.JvmConfig(javaHome, jvmArgs), mainClass, None, None, None))
-        val resources = Some(resources0.asScala.toList.flatMap{
-          case a: Resource => Option(Paths.get(a.getDirectory()))
+        val resources = Some(resources0.asScala.toList.flatMap {
+          case a: Resource =>
+            val dir = Paths.get(a.getDirectory())
+            if (Files.exists(dir)) {
+              if (a.getIncludes().isEmpty() && a.getExcludes().isEmpty()) {
+                Some(dir)
+              } else {
+                val scanner = new DirectoryScanner()
+                scanner.setBasedir(a.getDirectory())
+                scanner.setIncludes(a.getIncludes().toArray(new Array[String](0)))
+                scanner.setExcludes(a.getExcludes().toArray(new Array[String](0)))
+                scanner.scan()
+                scanner.getIncludedFiles().map(f => dir.resolve(f))
+              }
+            } else None
           case _ => None
         })
         val project = Config.Project(name, baseDirectory, Some(root.toPath), sourceDirs, None, None, fullDependencies, classpath, out, classesDir, resources, `scala`, java, sbt, test, platform, resolution, Some(tags), None)
