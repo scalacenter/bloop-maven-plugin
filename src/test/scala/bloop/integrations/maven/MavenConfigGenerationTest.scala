@@ -438,10 +438,6 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
       }
 
       val exitCode = process.waitFor()
-      if (exitCode != 0) {
-        println("Command failed with exit code: " + exitCode)
-        println("Error output: " + lastError.toString())
-      }
 
       out.toString()
     }
