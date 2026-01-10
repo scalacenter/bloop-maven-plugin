@@ -467,4 +467,12 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
     }
   }
 
+  @Test
+  def issue84() = {
+    check("issue_84/pom.xml") { (configFile, projectName, subprojects) =>
+      assert(subprojects.isEmpty)
+      assert(configFile.project.`scala`.isDefined, "Scala config should be defined")
+      assertEquals("3.4.2", configFile.project.`scala`.get.version)
+    }
+  }
 }
