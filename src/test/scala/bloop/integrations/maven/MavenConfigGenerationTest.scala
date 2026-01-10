@@ -401,4 +401,25 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
     }
   }
 
+  @Test
+  def defaultResources() = {
+    check(
+      "basic_scala/pom.xml",
+      extraContent = Map(
+        "basic_scala/src/main/resources/hello.txt" -> "hello"
+      )
+    ) { (configFile, projectName, subprojects) =>
+      assert(subprojects.isEmpty)
+      val resources = configFile.project.resources.getOrElse(Nil)
+      // When no includes/excludes are specified, the whole directory should be included
+      val resourceDir = configFile.project.directory.resolve("src/main/resources").toAbsolutePath
+      val hasResourceDir = resources.exists(_.toAbsolutePath == resourceDir)
+      assert(hasResourceDir, s"Resource directory $resourceDir SHOULD be in resources")
+      
+      // Individual files should NOT be listed
+      val hasFile = resources.exists(_.toString.endsWith("hello.txt"))
+      assert(!hasFile, "Individual files inside resource dir should NOT be in resources list")
+    }
+  }
+
 }
