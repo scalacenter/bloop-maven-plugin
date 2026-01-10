@@ -42,7 +42,12 @@ object MojoImplementation {
     val (newConfig, moduleType) = Option(buildPlugins.get(ScalaMavenGroupArtifact)) match {
       case None => (None, BloopMojo.ModuleType.JAVA)
       case Some(scalaMavenPlugin) =>
-        (Some(scalaMavenPlugin.getConfiguration.asInstanceOf[Xpp3Dom]), BloopMojo.ModuleType.SCALA)
+        val pluginConfig = Option(scalaMavenPlugin.getConfiguration).map(_.asInstanceOf[Xpp3Dom])
+        val executionConfigs = scalaMavenPlugin.getExecutions.asScala
+          .flatMap(e => Option(e.getConfiguration).map(_.asInstanceOf[Xpp3Dom]))
+        val combinedConfig = (executionConfigs ++ pluginConfig)
+          .reduceOption((dominant, recessive) => Xpp3Dom.mergeXpp3Dom(dominant, recessive))
+        (combinedConfig, BloopMojo.ModuleType.SCALA)
     }
 
     val javaCompilerArgs: List[String] = Option(buildPlugins.get(JavaMavenGroupArtifact)) match {
