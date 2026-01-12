@@ -404,9 +404,9 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
   @Test
   def defaultResources() = {
     check(
-      "basic_scala/pom.xml",
+      "default_resources/pom.xml",
       extraContent = Map(
-        "basic_scala/src/main/resources/hello.txt" -> "hello"
+        "default_resources/src/main/resources/hello.txt" -> "hello"
       )
     ) { (configFile, projectName, subprojects) =>
       assert(subprojects.isEmpty)
