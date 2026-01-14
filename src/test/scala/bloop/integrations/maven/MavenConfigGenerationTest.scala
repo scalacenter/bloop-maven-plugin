@@ -446,6 +446,31 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
 
 
   @Test
+  def withIncludes() = {
+    check(
+      "with_includes/pom.xml",
+      extraContent = Map(
+        "with_includes/src/main/resources/included.txt" -> "This file should be included.",
+        "with_includes/src/main/resources/excluded.txt" -> "This file should be excluded."
+      )
+    ) { (configFile, projectName, subprojects) =>
+      assert(subprojects.isEmpty)
+      val resources = configFile.project.resources.getOrElse(Nil)
+      
+      val included = resources.find(_.toString.endsWith("included.txt"))
+      val excluded = resources.find(_.toString.endsWith("excluded.txt"))
+      
+      assert(included.isDefined, "included.txt should be in resources")
+      assert(excluded.isEmpty, "excluded.txt should NOT be in resources")
+
+      // Ensure the directory itself is not added when we have explicit includes
+      val resourceDir = configFile.project.directory.resolve("src/main/resources").toAbsolutePath
+      val hasResourceDir = resources.exists(_.toAbsolutePath == resourceDir)
+      assert(!hasResourceDir, s"Resource directory $resourceDir should NOT be in resources when includes are specified")
+    }
+  }
+
+  @Test
   def issue85() = {
     check(
       "issue_85/pom.xml",
@@ -464,6 +489,27 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
       val baseDirectory = configFile.project.directory.toAbsolutePath
       val hasBaseDir = resources.exists(_.toAbsolutePath == baseDirectory)
       assert(!hasBaseDir, s"Base directory $baseDirectory should NOT be in resources when includes are specified")
+    }
+  }
+
+  @Test
+  def defaultResources() = {
+    check(
+      "default_resources/pom.xml",
+      extraContent = Map(
+        "default_resources/src/main/resources/hello.txt" -> "hello"
+      )
+    ) { (configFile, projectName, subprojects) =>
+      assert(subprojects.isEmpty)
+      val resources = configFile.project.resources.getOrElse(Nil)
+      // When no includes/excludes are specified, the whole directory should be included
+      val resourceDir = configFile.project.directory.resolve("src/main/resources").toAbsolutePath
+      val hasResourceDir = resources.exists(_.toAbsolutePath == resourceDir)
+      assert(hasResourceDir, s"Resource directory $resourceDir SHOULD be in resources")
+      
+      // Individual files should NOT be listed
+      val hasFile = resources.exists(_.toString.endsWith("hello.txt"))
+      assert(!hasFile, "Individual files inside resource dir should NOT be in resources list")
     }
   }
 

@@ -324,17 +324,17 @@ object MojoImplementation {
             val dir = Paths.get(a.getDirectory())
             if (Files.exists(dir)) {
               if (a.getIncludes().isEmpty() && a.getExcludes().isEmpty()) {
-                Some(dir)
+                List(dir)
               } else {
                 val scanner = new DirectoryScanner()
                 scanner.setBasedir(a.getDirectory())
                 scanner.setIncludes(a.getIncludes().toArray(new Array[String](0)))
                 scanner.setExcludes(a.getExcludes().toArray(new Array[String](0)))
                 scanner.scan()
-                scanner.getIncludedFiles().map(f => dir.resolve(f))
+                scanner.getIncludedFiles().toList.map(f => dir.resolve(f))
               }
-            } else None
-          case _ => None
+            } else Nil
+          case _ => Nil
         })
         val project = Config.Project(name, baseDirectory, Some(root.toPath), sourceDirs, None, None, fullDependencies, classpath, out, classesDir, resources, `scala`, java, sbt, test, platform, resolution, Some(tags), None)
         Config.File(Config.File.LatestVersion, project)
