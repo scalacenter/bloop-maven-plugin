@@ -255,7 +255,8 @@ object MojoImplementation {
         }
 
       val (modules, extraClasspath) = {
-        val hasJunit = allArtifacts.exists(a => a.getGroupId == "junit" && a.getArtifactId == "junit")
+        val hasJunit =
+          allArtifacts.exists(a => a.getGroupId == "junit" && a.getArtifactId == "junit")
         val hasJunitInterface = allArtifacts.exists(a => a.getArtifactId == "junit-interface")
         if (hasJunit && !hasJunitInterface && configuration == "test") {
           val junitInterfaceVersion = "0.13.3"
@@ -347,7 +348,9 @@ object MojoImplementation {
       log.debug(s"Configuration to be serialized:\n$config")
       bloop.config.write(config, configTarget.toPath)
 
-      log.info(s"Starting to write configuration for project: ${project.getArtifactId()} with configuration: $configuration")
+      log.info(
+        s"Starting to write configuration for project: ${project.getArtifactId()} with configuration: $configuration"
+      )
       log.debug(s"Source directories: ${sourceDirs0.map(_.getAbsolutePath).mkString(", ")}")
       log.debug(s"Classpath: ${classpath0().asScala.mkString(", ")}")
       log.debug(s"Resources: ${resources0.asScala.mkString(", ")}")
