@@ -1,0 +1,27 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>consumer</artifactId>
+  <version>0.1</version>
+  <name>consumer</name>
+  <description>Depends on the shaded `lib` module.</description>
+  <parent>
+    <groupId>com.example</groupId>
+    <artifactId>shade_relocation</artifactId>
+    <version>0.1</version>
+  </parent>
+  <properties>
+    <maven.compiler.source>1.8</maven.compiler.source>
+    <maven.compiler.target>1.8</maven.compiler.target>
+    <encoding>UTF-8</encoding>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.example</groupId>
+      <artifactId>lib</artifactId>
+      <version>0.1</version>
+    </dependency>
+  </dependencies>
+
+</project>

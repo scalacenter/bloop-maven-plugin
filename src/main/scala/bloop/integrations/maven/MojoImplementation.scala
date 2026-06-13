@@ -29,6 +29,7 @@ import scala_maven.AppLauncher
 object MojoImplementation {
   private val ScalaMavenGroupArtifact = "net.alchim31.maven:scala-maven-plugin"
   private val JavaMavenGroupArtifact = "org.apache.maven.plugins:maven-compiler-plugin"
+  private val ShadeGroupArtifact = "org.apache.maven.plugins:maven-shade-plugin"
 
   def initializeMojo(
       project: MavenProject,
@@ -134,6 +135,65 @@ object MojoImplementation {
       }
     }
 
+    // A reactor module built by maven-shade-plugin rewrites/bundles its bytecode into the shaded
+    // JAR; those classes never land in target/classes. Dependents must therefore see the JAR, not
+    // the (empty) output directory. Returns the shaded JAR for such a module only when it replaces
+    // the module's main artifact AND exists on disk in this reactor build. Returns None when the
+    // module is not shaded, when shade attaches the shaded JAR as a secondary (classified) artifact
+    // (the main artifact stays unshaded, so target/classes is correct), or when the JAR has not been
+    // produced yet (shade binds to `package`, after this goal) — in which case it warns. We never
+    // resolve the module's GAV from a repository: that could wire a stale installed/released binary
+    // instead of the current build output.
+    def shadedJarOf(p: MavenProject): Option[File] = {
+      Option(p.getBuild.getPluginsAsMap.get(ShadeGroupArtifact))
+        // Only treat it as shade-built when an execution actually binds the `shade` goal; mere
+        // plugin/config presence (e.g. shared config, no bound execution) does not produce a JAR.
+        .filter(_.getExecutions.asScala.exists(_.getGoals.asScala.contains("shade")))
+        .flatMap { plugin =>
+        // Merge execution-level config (where the `shade` goal is usually bound) over plugin-level.
+        val pluginCfg = Option(plugin.getConfiguration).map(_.asInstanceOf[Xpp3Dom])
+        val execCfgs = plugin.getExecutions.asScala
+          .flatMap(e => Option(e.getConfiguration).map(_.asInstanceOf[Xpp3Dom]))
+        val cfg = (execCfgs ++ pluginCfg)
+          .reduceOption((dominant, recessive) => Xpp3Dom.mergeXpp3Dom(dominant, recessive))
+        def child(name: String): Option[String] =
+          cfg
+            .flatMap(d => Option(d.getChild(name)))
+            .flatMap(c => Option(c.getValue))
+            .map(_.trim)
+            .filter(_.nonEmpty)
+
+        val build = p.getBuild
+        def warnMissing(jar: File): Option[File] = {
+          log.warn(
+            s"Reactor module '${p.getArtifactId}' is built by maven-shade-plugin but its shaded " +
+              s"JAR was not found at $jar. Its relocated/bundled classes are NOT in target/classes, " +
+              s"so dependents will fail to compile. Run `mvn package` on '${p.getArtifactId}' " +
+              s"(shade binds to the package phase) before exporting to bloop."
+          )
+          None
+        }
+
+        child("outputFile") match {
+          case Some(out) =>
+            // Explicit output path; resolve relative entries against the module base directory.
+            val f = new File(out)
+            val jar = if (f.isAbsolute) f else new File(p.getBasedir, out)
+            if (jar.exists()) Some(jar) else warnMissing(jar)
+          case None =>
+            // With shadedArtifactAttached the shaded JAR is a secondary (classified) artifact and
+            // the module's main artifact stays unshaded, so target/classes remains correct.
+            val attached = child("shadedArtifactAttached").exists(_.equalsIgnoreCase("true"))
+            if (attached) None
+            else {
+              val base = child("finalName").getOrElse(build.getFinalName)
+              val jar = new File(build.getDirectory, s"$base.jar")
+              if (jar.exists()) Some(jar) else warnMissing(jar)
+            }
+        }
+      }
+    }
+
     val reactorArtifactIds = session.getProjects().asScala.map(_.getArtifactId).toSet
 
     def getBloopName(artifactId: String, configuration: String): String = {
@@ -162,19 +222,39 @@ object MojoImplementation {
     val project = mojo.getProject()
     val dependencies =
       session.getProjectDependencyGraph.getUpstreamProjects(project, true).asScala.toList
+
+    // Reactor deps whose output we replace with a shaded JAR. These must be dropped from the bloop
+    // `dependencies` list as well: a bloop project dependency contributes that project's classesDir
+    // (target/classes) to the effective compile classpath, which would re-introduce the empty
+    // directory we are substituting away on the classpath. The shaded JAR is a self-contained
+    // binary, so the dependent should consume it as a library, not as a project dependency.
+    val shadedDeps: Map[MavenProject, File] =
+      dependencies.flatMap(d => shadedJarOf(d).map(d -> _)).toMap
+    val shadedDepArtifactIds: Set[String] = shadedDeps.keySet.map(_.getArtifactId)
+
     val dependencyNames = dependencies.flatMap(dep => {
       val matchingArtifacts = project.getArtifacts.asScala.filter(a =>
         ArtifactUtils.versionlessKey(dep.getArtifact) == ArtifactUtils.versionlessKey(a)
       )
 
       log.info(s"Dependency $dep, $matchingArtifacts")
-      matchingArtifacts
-        .collect {
-          case artifact if artifact.getType == "test-jar" => getBloopName(dep.getArtifactId, "test")
-        }
-        .toList
-        .appended(dep.getArtifactId)
+      val testNames = matchingArtifacts.collect {
+        case artifact if artifact.getType == "test-jar" => getBloopName(dep.getArtifactId, "test")
+      }.toList
+      // Drop only the main project dependency when its output is replaced by a shaded JAR. A
+      // consumed test-jar is a separate artifact that shade's main-artifact replacement does not
+      // touch, so its dependency name is preserved.
+      if (shadedDepArtifactIds.contains(dep.getArtifactId)) testNames
+      else testNames.appended(dep.getArtifactId)
     })
+
+    // Map each shaded reactor dep's compile output directory (target/classes) to its shaded JAR, so
+    // we can substitute it wherever the stale output directory would otherwise reach a dependent's
+    // classpath. Keyed by canonical path to match the explicit list and Maven-resolved entries.
+    def canon(p: String): String = new File(p).getCanonicalPath
+    val shadedByOutputDir: Map[String, String] =
+      shadedDeps.map { case (d, jar) => canon(d.getBuild.getOutputDirectory) -> jar.getAbsolutePath }
+    def substituteShaded(path: String): String = shadedByOutputDir.getOrElse(canon(path), path)
 
     val configDir = mojo.getBloopConfigDir.toPath()
     if (!Files.exists(configDir)) Files.createDirectory(configDir)
@@ -300,12 +380,16 @@ object MojoImplementation {
           if (!resolvedArtifactKeys.contains(ArtifactUtils.versionlessKey(d.getArtifact))) Nil
           else {
             val build = d.getBuild()
-            if (configuration == "compile") build.getOutputDirectory() :: Nil
-            else build.getTestOutputDirectory() :: build.getOutputDirectory() :: Nil
+            val dirs =
+              if (configuration == "compile") build.getOutputDirectory() :: Nil
+              else build.getTestOutputDirectory() :: build.getOutputDirectory() :: Nil
+            dirs.map(substituteShaded)
           }
         }
 
-        val cp = classpath0().asScala.toList.asInstanceOf[List[String]].map(u => abs(new File(u)))
+        val cp = classpath0().asScala.toList
+          .asInstanceOf[List[String]]
+          .map(u => abs(new File(substituteShaded(u))))
         // scalaLibrary might not be added by default to classpath and it's needed for the compilation
         val hasScalaLibrary = cp.exists(p => p.toFile().getName().contains("scala_library-"))
 
