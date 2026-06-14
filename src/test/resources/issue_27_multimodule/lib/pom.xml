@@ -1,0 +1,63 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>lib</artifactId>
+  <version>0.1</version>
+  <name>lib</name>
+  <description>Library module that declares a system-scoped dependency.</description>
+  <parent>
+    <groupId>com.example</groupId>
+    <artifactId>issue_27_multimodule</artifactId>
+    <version>0.1</version>
+  </parent>
+  <properties>
+    <maven.compiler.source>1.8</maven.compiler.source>
+    <maven.compiler.target>1.8</maven.compiler.target>
+    <encoding>UTF-8</encoding>
+    <scala.version>2.13.6</scala.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>scala-library</artifactId>
+      <version>${scala.version}</version>
+    </dependency>
+
+    <!-- System-scoped dependency pointing at a jar guaranteed present in any JDK 9+.
+         The plugin must use this systemPath instead of resolving it from a remote repo
+         (issue #27). Maven does not make system scope transitive, so this dependency stays
+         local to 'lib' and does not propagate to modules that depend on 'lib'. -->
+    <dependency>
+      <groupId>com.example.system</groupId>
+      <artifactId>fake-system-lib</artifactId>
+      <version>1.0</version>
+      <scope>system</scope>
+      <systemPath>${java.home}/lib/jrt-fs.jar</systemPath>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <sourceDirectory>src/main/scala</sourceDirectory>
+    <testSourceDirectory>src/test/scala</testSourceDirectory>
+    <plugins>
+      <plugin>
+        <groupId>net.alchim31.maven</groupId>
+        <artifactId>scala-maven-plugin</artifactId>
+        <version>3.3.2</version>
+        <configuration></configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>compile</goal>
+              <goal>testCompile</goal>
+            </goals>
+            <configuration>
+              <args></args>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>
