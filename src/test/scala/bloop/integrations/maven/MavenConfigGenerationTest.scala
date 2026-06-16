@@ -202,6 +202,28 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
     }
   }
 
+  // See https://github.com/scalacenter/bloop-maven-plugin/issues/26 and the upstream
+  // sbt/zinc#837. The plugin's only responsibility for `--add-exports` is to forward it
+  // verbatim from maven-compiler-plugin's <compilerArgs> into the bloop config's
+  // `java.options`; the IllegalAccessError reported in #26 happens later, inside zinc's
+  // API extraction in the bloop server JVM, which is outside this plugin's reach.
+  @Test
+  def issue26() = {
+    check("issue_26/pom.xml") { (configFile, _, subprojects) =>
+      assert(subprojects.isEmpty)
+      assert(configFile.project.`scala`.isEmpty, "issue_26 is a Java-only module")
+      val opts = configFile.project.java.get.options
+      assert(
+        opts.contains("--add-exports"),
+        s"java.options should forward --add-exports, was: $opts"
+      )
+      assert(
+        opts.contains("jdk.javadoc/jdk.javadoc.internal.tool=ALL-UNNAMED"),
+        s"java.options should forward the --add-exports value, was: $opts"
+      )
+    }
+  }
+
   @Test
   def conflictingSubmodules() = {
     check(
