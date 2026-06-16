@@ -250,15 +250,31 @@ object MojoImplementation {
                     art.setVersion(context.version.toString)
                 case _ =>
               }
-            resolveArtifact(art).foreach { resolvedFile =>
-              // since we don't resolve dependencies automatically in the plugin, this will be null
-              art.setFile(resolvedFile)
+            if (art.getScope() == Artifact.SCOPE_SYSTEM) {
+              // System-scoped deps are not in any repository; their jar is the
+              // <systemPath> file Maven already set. Never resolve remotely
+              // (issue #27 — transitive system deps like jdk.tools:jdk.tools).
+              val file = art.getFile()
+              if (file != null && file.exists())
+                Some(artifactToConfigModule(art, project, session))
+              else {
+                log.warn(
+                  s"Skipping system-scoped artifact $art: systemPath file missing " +
+                    s"(${Option(file).map(_.getPath).getOrElse("null")})"
+                )
+                None
+              }
+            } else {
+              resolveArtifact(art).foreach { resolvedFile =>
+                // since we don't resolve dependencies automatically in the plugin, this will be null
+                art.setFile(resolvedFile)
+              }
+              if (mojo.shouldDownloadSources()) {
+                resolveArtifact(art, sources = true)
+              }
+              Some(artifactToConfigModule(art, project, session))
             }
-            if (mojo.shouldDownloadSources()) {
-              resolveArtifact(art, sources = true)
-            }
-            artifactToConfigModule(art, project, session)
-        }
+        }.flatten
 
       val (modules, extraClasspath) = {
         val hasJunit =

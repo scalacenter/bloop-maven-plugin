@@ -361,6 +361,20 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
       extraContent: Map[String, String] = Map.empty
   )(
       checking: (Config.File, String, List[Config.File]) => Unit
+  ): Unit =
+    checkWithOutput(testProject, submodules, extraContent) {
+      (configFile, projectName, subProjects, _) => checking(configFile, projectName, subProjects)
+    }
+
+  // Same as `check`, but also hands the raw Maven output (stdout+stderr) to the assertion so
+  // tests can verify behavior that lives in the log, e.g. that the plugin did NOT attempt a
+  // remote download for a system-scoped dependency (issue #27).
+  private def checkWithOutput(
+      testProject: String,
+      submodules: List[String] = Nil,
+      extraContent: Map[String, String] = Map.empty
+  )(
+      checking: (Config.File, String, List[Config.File], String) => Unit
   ): Unit = {
     println(s"Checking $testProject")
     val tempDir = Files.createTempDirectory("mavenBloop")
@@ -403,6 +417,7 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
     ).flatten
 
     val result = exec(allArgs, outFile.getParent().toFile())
+    val mavenOutput = result.getOrElse("")
     try {
       val projectPath = outFile.getParent()
       val projectName = projectPath.toFile().getName()
@@ -416,12 +431,12 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
         val subProjectFile = bloopDir.resolve(s"${subProjectName}.json")
         readValidBloopConfig(subProjectFile.toFile())
       }
-      checking(configFile, projectName, subProjects)
+      checking(configFile, projectName, subProjects, mavenOutput)
       tempDir.toFile().delete()
       ()
     } catch {
       case NonFatal(e) =>
-        println("Maven output:\n" + result)
+        println("Maven output:\n" + mavenOutput)
         throw e
     }
   }
@@ -444,6 +459,9 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
       val out = new StringBuilder()
       processBuilder.directory(cwd)
       processBuilder.command(cmd: _*)
+      // Merge stderr into stdout so assertions can see all Maven/plugin log output
+      // (e.g. "[ERROR] FAILURE ...:system" lines emitted on a failed resolution).
+      processBuilder.redirectErrorStream(true)
       var process = processBuilder.start()
 
       val reader =
@@ -606,6 +624,97 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
         hasRuntimeClasspathEntryName(configFile, "scala-library"),
         "scala-library should still be on the JVM platform runtime classpath"
       )
+    }
+  }
+
+  @Test
+  def issue27() = {
+    // A system-scoped dependency must use its provided <systemPath> instead of being
+    // resolved from remote repositories (issue #27). Without the fix the plugin attempts a
+    // (doomed) remote download and logs "FAILURE ...:system / Could not resolve". We point
+    // systemPath at jrt-fs.jar, which exists in any JDK 9+, so this is reliable cross-JDK.
+    checkWithOutput("issue_27/pom.xml") { (configFile, projectName, subprojects, mavenOutput) =>
+      assert(subprojects.isEmpty)
+      assert(configFile.project.`scala`.isDefined)
+
+      // Core regression contract: the plugin must NOT attempt to remotely resolve/download
+      // the system-scoped artifact. Before the fix the log contains lines such as
+      // "[ERROR] FAILURE ...fake-system-lib...:system" and "Downloading ...fake-system-lib...".
+      assertNoRemoteResolution(mavenOutput, "fake-system-lib")
+
+      // The system-scoped jar must appear on the compile classpath via its systemPath.
+      assert(
+        hasCompileClasspathEntryName(configFile, "jrt-fs.jar"),
+        "system-scoped jar (jrt-fs.jar) should be on the compile classpath"
+      )
+
+      // It must surface as a resolution module pointing at the provided systemPath jar
+      // (jrt-fs.jar) — proving the plugin used the local path, not a remote download.
+      val modules = configFile.project.resolution.toList.flatMap(_.modules)
+      val systemModule = modules.find(_.name == "fake-system-lib")
+      assert(
+        systemModule.isDefined,
+        "system-scoped dependency should be present as a resolution module"
+      )
+      assert(
+        systemModule.get.artifacts.exists(_.path.toString.endsWith("jrt-fs.jar")),
+        "system-scoped module must point at the provided systemPath jar, not a remote download"
+      )
+    }
+  }
+
+  // Asserts the Maven/plugin log shows no attempt to remotely resolve or download the given
+  // (system-scoped) artifact: no "FAILURE/Downloading/Could not ... <artifact>" lines.
+  private def assertNoRemoteResolution(mavenOutput: String, artifact: String): Unit = {
+    val offending = mavenOutput.linesIterator
+      .filter(_.contains(artifact))
+      .filter(l => l.contains("FAILURE") || l.contains("Downloading") || l.contains("Could not"))
+      .toList
+    assert(
+      offending.isEmpty,
+      s"plugin must not remote-resolve system-scoped '$artifact'; offending log lines:\n" +
+        offending.mkString("\n")
+    )
+  }
+
+  @Test
+  def issue27MultiModule() = {
+    // A multi-module reactor where 'lib' declares a system-scoped dependency and 'app'
+    // depends on 'lib'. The whole reactor build must succeed (check() fails if any config
+    // is not produced). Note: Maven does NOT propagate a system-scoped dependency
+    // transitively across modules, so the jar surfaces only on the declaring module ('lib').
+    // A true external dependency-of-dependency behaves the same — the consumer never sees
+    // the system artifact in its resolved artifacts — so the meaningful unit of behavior is
+    // the declaring module.
+    checkWithOutput(
+      "issue_27_multimodule/pom.xml",
+      submodules = List("issue_27_multimodule/lib/pom.xml", "issue_27_multimodule/app/pom.xml")
+    ) {
+      case (_, _, List(libConfig, appConfig), mavenOutput) =>
+        // The plugin must not attempt to remotely resolve/download the system-scoped artifact.
+        assertNoRemoteResolution(mavenOutput, "fake-system-lib")
+
+        // lib declares the system dep: it must be on lib's classpath and resolution modules,
+        // pointing at the provided systemPath jar rather than a remote download.
+        assert(
+          hasCompileClasspathEntryName(libConfig, "jrt-fs.jar"),
+          "lib should have the system-scoped jar (jrt-fs.jar) on its compile classpath"
+        )
+        val libSystemModule =
+          libConfig.project.resolution.toList.flatMap(_.modules).find(_.name == "fake-system-lib")
+        assert(
+          libSystemModule.exists(_.artifacts.exists(_.path.toString.endsWith("jrt-fs.jar"))),
+          "lib's system-scoped module must point at the provided systemPath jar"
+        )
+
+        // app only depends on lib: per Maven's non-transitive system scope, the system jar
+        // does not reach app. Asserting this documents the real (correct) behavior.
+        assert(
+          !hasCompileClasspathEntryName(appConfig, "jrt-fs.jar"),
+          "system-scoped dep must not propagate transitively onto the consumer's classpath"
+        )
+      case _ =>
+        fail("issue_27_multimodule should have exactly two submodules")
     }
   }
 }
