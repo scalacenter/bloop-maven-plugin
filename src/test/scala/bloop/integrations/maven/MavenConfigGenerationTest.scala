@@ -182,6 +182,68 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
   }
 
   @Test
+  def shadeRelocation() = {
+    // `lib` is built by maven-shade-plugin: its relocated classes live only inside lib-0.1.jar,
+    // never in lib/target/classes. The dependent `consumer` must therefore see the shaded JAR on
+    // its classpath, not the (empty) output directory. Package first so the shaded JAR exists.
+    check(
+      "shade_relocation/pom.xml",
+      submodules = List("shade_relocation/lib/pom.xml", "shade_relocation/consumer/pom.xml"),
+      prePackage = true
+    ) {
+      case (configFile, projectName, List(lib, consumer)) =>
+        assert(
+          hasCompileClasspathEntryName(consumer, "lib-0.1.jar"),
+          s"consumer should depend on the shaded JAR lib-0.1.jar; classpath=${consumer.project.classpath}"
+        )
+        val staleOutputDir = "lib" + File.separator + "target" + File.separator + "classes"
+        assert(
+          !hasCompileClasspathEntryName(consumer, staleOutputDir),
+          s"consumer must NOT link the stale $staleOutputDir; classpath=${consumer.project.classpath}"
+        )
+        // The shaded module must NOT remain a bloop project dependency: a project dependency
+        // contributes its classesDir (lib/target/classes) to the effective classpath, which would
+        // re-introduce the empty directory through the dependency graph.
+        assert(
+          !consumer.project.dependencies.contains("lib"),
+          s"consumer must not keep `lib` as a project dependency; deps=${consumer.project.dependencies}"
+        )
+      case _ =>
+        assert(false, "shade_relocation should have lib and consumer submodules")
+    }
+  }
+
+  @Test
+  def shadeRelocationCleanFallback() = {
+    // Without a prior `package`, the shaded JAR does not exist yet (shade binds to package, after
+    // bloopInstall's generate-resources). This locks in the documented warn+fallback behavior:
+    // the plugin must NOT wire a (stale) JAR, and instead leaves `lib` as a normal project
+    // dependency with its target/classes on the classpath, exactly as before the shade handling.
+    check(
+      "shade_relocation/pom.xml",
+      submodules = List("shade_relocation/lib/pom.xml", "shade_relocation/consumer/pom.xml"),
+      prePackage = false
+    ) {
+      case (configFile, projectName, List(lib, consumer)) =>
+        val staleOutputDir = "lib" + File.separator + "target" + File.separator + "classes"
+        assert(
+          hasCompileClasspathEntryName(consumer, staleOutputDir),
+          s"clean export should fall back to $staleOutputDir; classpath=${consumer.project.classpath}"
+        )
+        assert(
+          !hasCompileClasspathEntryName(consumer, "lib-0.1.jar"),
+          s"clean export must NOT wire a shaded JAR that was not built; classpath=${consumer.project.classpath}"
+        )
+        assert(
+          consumer.project.dependencies.contains("lib"),
+          s"clean export should keep `lib` as a project dependency; deps=${consumer.project.dependencies}"
+        )
+      case _ =>
+        assert(false, "shade_relocation should have lib and consumer submodules")
+    }
+  }
+
+  @Test
   def noLibrary() = {
     check("no_library/pom.xml") { (configFile, projectName, subprojects) =>
       assert(subprojects.isEmpty)
@@ -422,11 +484,12 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
   private def check(
       testProject: String,
       submodules: List[String] = Nil,
-      extraContent: Map[String, String] = Map.empty
+      extraContent: Map[String, String] = Map.empty,
+      prePackage: Boolean = false
   )(
       checking: (Config.File, String, List[Config.File]) => Unit
   ): Unit =
-    checkWithOutput(testProject, submodules, extraContent) {
+    checkWithOutput(testProject, submodules, extraContent, prePackage) {
       (configFile, projectName, subProjects, _) => checking(configFile, projectName, subProjects)
     }
 
@@ -436,7 +499,8 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
   private def checkWithOutput(
       testProject: String,
       submodules: List[String] = Nil,
-      extraContent: Map[String, String] = Map.empty
+      extraContent: Map[String, String] = Map.empty,
+      prePackage: Boolean = false
   )(
       checking: (Config.File, String, List[Config.File], String) => Unit
   ): Unit = {
@@ -472,6 +536,16 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
     properties.load(bloopProperties)
     val version = properties.get("version").asInstanceOf[String]
 
+    // maven-shade-plugin binds to the `package` phase, while bloopInstall runs at generate-sources.
+    // For fixtures that rely on a shaded JAR existing on disk, package the reactor first.
+    val packageResult =
+      if (prePackage)
+        exec(
+          List(javaArgs, jarArgs, List("package", "-DskipTests")).flatten,
+          outFile.getParent().toFile()
+        )
+      else Try("")
+
     val command =
       List(s"ch.epfl.scala:bloop-maven-plugin:$version:bloopInstall", "-DdownloadSources=true")
     val allArgs = List(
@@ -500,6 +574,7 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
       ()
     } catch {
       case NonFatal(e) =>
+        if (prePackage) println("Maven package output:\n" + packageResult)
         println("Maven output:\n" + mavenOutput)
         throw e
     }
