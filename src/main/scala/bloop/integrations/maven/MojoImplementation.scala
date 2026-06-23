@@ -13,6 +13,7 @@ import bloop.config.Tag
 import org.apache.maven.artifact.Artifact
 import org.apache.maven.artifact.ArtifactUtils
 import org.apache.maven.execution.MavenSession
+import org.apache.maven.model.PluginExecution
 import org.apache.maven.model.Resource
 import org.apache.maven.plugin.MavenPluginManager
 import org.apache.maven.plugin.Mojo
@@ -40,16 +41,47 @@ object MojoImplementation {
   ): Either[String, BloopMojo] = {
     val buildPlugins = project.getBuild().getPluginsAsMap();
 
-    val (newConfig, moduleType) = Option(buildPlugins.get(ScalaMavenGroupArtifact)) match {
-      case None => (None, BloopMojo.ModuleType.JAVA)
-      case Some(scalaMavenPlugin) =>
-        val pluginConfig = Option(scalaMavenPlugin.getConfiguration).map(_.asInstanceOf[Xpp3Dom])
-        val executionConfigs = scalaMavenPlugin.getExecutions.asScala
-          .flatMap(e => Option(e.getConfiguration).map(_.asInstanceOf[Xpp3Dom]))
-        val combinedConfig = (executionConfigs ++ pluginConfig)
-          .reduceOption((dominant, recessive) => Xpp3Dom.mergeXpp3Dom(dominant, recessive))
-        (combinedConfig, BloopMojo.ModuleType.SCALA)
-    }
+    // Xpp3Dom.mergeXpp3Dom mutates its dominant argument in place. Every DOM we feed into a
+    // merge must therefore be a private deep copy of the Maven model object: without cloning,
+    // building one view (e.g. the union) would pollute the execution DOMs that are reused to
+    // build the other views (e.g. the compile split), leaking one goal's config into another.
+    def cloneDom(dom: Xpp3Dom): Xpp3Dom = new Xpp3Dom(dom)
+    def reduceConfigs(configs: Seq[Xpp3Dom]): Option[Xpp3Dom] =
+      configs
+        .map(cloneDom)
+        .reduceOption((dominant, recessive) => Xpp3Dom.mergeXpp3Dom(dominant, recessive))
+
+    // Derive each goal's scalac options from the config Maven would pass to scala:compile /
+    // scala:testCompile: the plugin-level <configuration> merged with the <configuration> of the
+    // executions bound to that goal (execution-level dominates). Scope note: only scalac options
+    // are split per goal. Everything else (scala version/context, compiler jars, organization,
+    // source filters, compile setup) is still taken from the union view / primary mojo below and
+    // therefore cannot currently differ between the compile and test projects.
+    val (newConfig, compileConfig, testConfig, moduleType) =
+      Option(buildPlugins.get(ScalaMavenGroupArtifact)) match {
+        case None => (None, None, None, BloopMojo.ModuleType.JAVA)
+        case Some(scalaMavenPlugin) =>
+          val pluginConfig = Option(scalaMavenPlugin.getConfiguration).map(_.asInstanceOf[Xpp3Dom])
+          val executions = scalaMavenPlugin.getExecutions.asScala.toSeq
+          def configOf(e: PluginExecution): Option[Xpp3Dom] =
+            Option(e.getConfiguration).map(_.asInstanceOf[Xpp3Dom])
+          def goalsOf(e: PluginExecution): List[String] =
+            Option(e.getGoals).map(_.asScala.toList).getOrElse(Nil)
+          // An execution with no goals binds to nothing in Maven, so its config is deliberately
+          // excluded from both goal-scoped splits. It still feeds the union/primary mojo, which
+          // backs scala-version detection regardless of where <scalaVersion> is declared.
+          def boundTo(goal: String)(e: PluginExecution): Boolean = goalsOf(e).contains(goal)
+
+          // Each call re-clones from the originals (see cloneDom above), so the union, compile
+          // and test views are fully isolated from each other and from the Maven model.
+          def mergedConfig(selected: Seq[PluginExecution]): Option[Xpp3Dom] =
+            reduceConfigs(selected.flatMap(configOf) ++ pluginConfig)
+
+          val combinedConfig = mergedConfig(executions)
+          val compileSplit = mergedConfig(executions.filter(boundTo("compile")))
+          val testSplit = mergedConfig(executions.filter(boundTo("testCompile")))
+          (combinedConfig, compileSplit, testSplit, BloopMojo.ModuleType.SCALA)
+      }
 
     val javaCompilerArgs: List[String] = Option(buildPlugins.get(JavaMavenGroupArtifact)) match {
       case None => List()
@@ -61,15 +93,60 @@ object MojoImplementation {
         } else List()
     }
 
+    // Capture the current execution configuration BEFORE any mutation below, since each
+    // getConfiguredMojo call requires us to (re)set mojoExecution's configuration in place.
     val currentConfig = mojoExecution.getConfiguration
     val dom = newConfig.map(nc => Xpp3Dom.mergeXpp3Dom(nc, currentConfig))
     Try {
+      // Extract the scalac args produced by a given split. We go through a configured mojo
+      // (rather than reading <args> from the DOM) so that compiler-plugin options and
+      // target/release flags are appended exactly as scala-maven-plugin would. An absent split
+      // is not "no options": it means the goal has no per-execution override, so we fall back to
+      // the effective default config (currentConfig) and let scala-maven-plugin synthesize its
+      // defaults (e.g. -target/-release from maven.compiler.*) and honor user properties.
+      def scalacArgsFor(split: Option[Xpp3Dom]): java.util.List[String] = {
+        val effectiveConfig = split match {
+          case Some(config) => Xpp3Dom.mergeXpp3Dom(config, currentConfig)
+          case None => currentConfig
+        }
+        mojoExecution.setConfiguration(effectiveConfig)
+        val configuredMojo = mavenPluginManager
+          .getConfiguredMojo(classOf[Mojo], session, mojoExecution)
+          .asInstanceOf[BloopMojo]
+        // getScalacArgs resolves the Scala version/context, which can legitimately fail for a
+        // Java-only module that merely inherits scala-maven-plugin. As before, swallow that and
+        // fall back to no scalac options rather than aborting the whole module's config. Log at
+        // debug so a genuine failure (e.g. compiler-plugin resolution) is still discoverable.
+        Try(configuredMojo.getScalacArgs) match {
+          case Success(args) => args
+          case Failure(e) =>
+            configuredMojo.getLog.debug(
+              s"Could not resolve scalac options for ${project.getArtifactId()}; " +
+                "falling back to none",
+              e
+            )
+            java.util.Collections.emptyList[String]()
+        }
+      }
+
+      // Java-only modules have no Scala compilation (scalaContext is None), so their scalac args
+      // are never read; skip configuring a mojo for them.
+      val isScalaModule = moduleType == BloopMojo.ModuleType.SCALA
+      val compileScalacArgs: java.util.List[String] =
+        if (isScalaModule) scalacArgsFor(compileConfig) else java.util.Collections.emptyList()
+      val testScalacArgs: java.util.List[String] =
+        if (isScalaModule) scalacArgsFor(testConfig) else java.util.Collections.emptyList()
+
+      // Build the primary mojo LAST so mojoExecution ends in the union configuration. The
+      // union backs scala-version detection (see commit 5a1c6c3), source dirs, java args, etc.
       dom.foreach(mojoExecution.setConfiguration)
       val mojo = mavenPluginManager
         .getConfiguredMojo(classOf[Mojo], session, mojoExecution)
         .asInstanceOf[BloopMojo]
       mojo.setModuleType(moduleType)
       mojo.setJavaCompilerArgs(javaCompilerArgs.asJava)
+      mojo.setCompileScalacArgs(compileScalacArgs)
+      mojo.setTestScalacArgs(testScalacArgs)
       mojo
     } match {
       case Success(value) => Right(value)
@@ -286,8 +363,6 @@ object MojoImplementation {
           artifact.getGroupId()
       }
       .getOrElse("org.scala-lang")
-    val scalacArgs =
-      Try(mojo.getScalacArgs()).toOption.toList.map(_.asScala.toList).flatten.filter(_ != null)
 
     def writeConfig(
         sourceDirs0: Seq[File],
@@ -300,6 +375,11 @@ object MojoImplementation {
         configuration: String
     ): Unit = {
       val name = getBloopName(project.getArtifactId(), configuration)
+      // Per-execution scalac options: the `compile` goal and `testCompile` goal can differ.
+      val scalacArgsRaw =
+        if (configuration == "test") mojo.getTestScalacArgs else mojo.getCompileScalacArgs
+      val scalacArgs =
+        Option(scalacArgsRaw).toList.flatMap(_.asScala.toList).filter(_ != null)
       val build = project.getBuild()
       val baseDirectory = abs(project.getBasedir())
       val out = baseDirectory.resolve("target")
@@ -330,15 +410,31 @@ object MojoImplementation {
                     art.setVersion(context.version.toString)
                 case _ =>
               }
-            resolveArtifact(art).foreach { resolvedFile =>
-              // since we don't resolve dependencies automatically in the plugin, this will be null
-              art.setFile(resolvedFile)
+            if (art.getScope() == Artifact.SCOPE_SYSTEM) {
+              // System-scoped deps are not in any repository; their jar is the
+              // <systemPath> file Maven already set. Never resolve remotely
+              // (issue #27 — transitive system deps like jdk.tools:jdk.tools).
+              val file = art.getFile()
+              if (file != null && file.exists())
+                Some(artifactToConfigModule(art, project, session))
+              else {
+                log.warn(
+                  s"Skipping system-scoped artifact $art: systemPath file missing " +
+                    s"(${Option(file).map(_.getPath).getOrElse("null")})"
+                )
+                None
+              }
+            } else {
+              resolveArtifact(art).foreach { resolvedFile =>
+                // since we don't resolve dependencies automatically in the plugin, this will be null
+                art.setFile(resolvedFile)
+              }
+              if (mojo.shouldDownloadSources()) {
+                resolveArtifact(art, sources = true)
+              }
+              Some(artifactToConfigModule(art, project, session))
             }
-            if (mojo.shouldDownloadSources()) {
-              resolveArtifact(art, sources = true)
-            }
-            artifactToConfigModule(art, project, session)
-        }
+        }.flatten
 
       val (modules, extraClasspath) = {
         val hasJunit =

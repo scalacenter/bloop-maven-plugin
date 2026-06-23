@@ -264,6 +264,28 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
     }
   }
 
+  // See https://github.com/scalacenter/bloop-maven-plugin/issues/26 and the upstream
+  // sbt/zinc#837. The plugin's only responsibility for `--add-exports` is to forward it
+  // verbatim from maven-compiler-plugin's <compilerArgs> into the bloop config's
+  // `java.options`; the IllegalAccessError reported in #26 happens later, inside zinc's
+  // API extraction in the bloop server JVM, which is outside this plugin's reach.
+  @Test
+  def issue26() = {
+    check("issue_26/pom.xml") { (configFile, _, subprojects) =>
+      assert(subprojects.isEmpty)
+      assert(configFile.project.`scala`.isEmpty, "issue_26 is a Java-only module")
+      val opts = configFile.project.java.get.options
+      assert(
+        opts.contains("--add-exports"),
+        s"java.options should forward --add-exports, was: $opts"
+      )
+      assert(
+        opts.contains("jdk.javadoc/jdk.javadoc.internal.tool=ALL-UNNAMED"),
+        s"java.options should forward the --add-exports value, was: $opts"
+      )
+    }
+  }
+
   @Test
   def conflictingSubmodules() = {
     check(
@@ -360,6 +382,15 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
         assertEquals(List("multi_module_test_jar"), module1.project.dependencies)
         assertEquals(List("multi_module_test_jar", "foo-test", "foo"), module2.project.dependencies)
 
+        // The submodules declare scala-maven-plugin executions but no <configuration> (it comes
+        // from inherited pluginManagement). "No per-goal override" must still mean "Maven's
+        // effective config", so scala-maven-plugin's synthesized default for
+        // maven.compiler.target=1.8 (-target:8) must survive rather than collapse to no options.
+        List(module1, module2).foreach { module =>
+          val opts = module.project.`scala`.get.options
+          assert(opts.contains("-target:8"), s"scalac opts: $opts")
+        }
+
       case _ =>
         assert(false, "Multi module test jar should have two submodules")
     }
@@ -417,6 +448,39 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
     }
   }
 
+  @Test
+  def issue29() = {
+    // The compile and testCompile goals carry different scalac options via per-execution
+    // configuration; each bloop project should only see its own (plus shared plugin-level) args.
+    check("issue_29/pom.xml") { (configFile, projectName, subprojects) =>
+      assert(subprojects.isEmpty)
+      val compileOpts = configFile.project.`scala`.get.options
+      val testOpts = readValidBloopConfig(
+        configFile.project.directory.resolve(".bloop").resolve(s"$projectName-test.json").toFile()
+      ).project.`scala`.get.options
+
+      assert(compileOpts.contains("-Ywarn-unused"), s"compile opts: $compileOpts")
+      assert(!compileOpts.contains("-Xfatal-warnings"), s"compile opts: $compileOpts")
+      assert(testOpts.contains("-Xfatal-warnings"), s"test opts: $testOpts")
+      assert(!testOpts.contains("-Ywarn-unused"), s"test opts: $testOpts")
+
+      // A per-execution <args> overrides (replaces) the plugin-level <args>, mirroring Maven's
+      // own configuration-merge semantics, so the shared -deprecation does not leak into either.
+      assert(!compileOpts.contains("-deprecation"), s"compile opts: $compileOpts")
+      assert(!testOpts.contains("-deprecation"), s"test opts: $testOpts")
+
+      // The testCompile-only addScalacArgs must stay out of the compile options: the split
+      // config DOMs must not contaminate each other when the union view is built.
+      assert(testOpts.contains("-Xtest-only"), s"test opts: $testOpts")
+      assert(!compileOpts.contains("-Xtest-only"), s"compile opts: $compileOpts")
+
+      // An execution bound to an unrelated goal (add-source) must not contribute scalac options
+      // to either project; only compile/testCompile-bound executions feed the goal-scoped splits.
+      assert(!compileOpts.contains("-Xunrelated-goal"), s"compile opts: $compileOpts")
+      assert(!testOpts.contains("-Xunrelated-goal"), s"test opts: $testOpts")
+    }
+  }
+
   private def check(
       testProject: String,
       submodules: List[String] = Nil,
@@ -424,6 +488,21 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
       prePackage: Boolean = false
   )(
       checking: (Config.File, String, List[Config.File]) => Unit
+  ): Unit =
+    checkWithOutput(testProject, submodules, extraContent, prePackage) {
+      (configFile, projectName, subProjects, _) => checking(configFile, projectName, subProjects)
+    }
+
+  // Same as `check`, but also hands the raw Maven output (stdout+stderr) to the assertion so
+  // tests can verify behavior that lives in the log, e.g. that the plugin did NOT attempt a
+  // remote download for a system-scoped dependency (issue #27).
+  private def checkWithOutput(
+      testProject: String,
+      submodules: List[String] = Nil,
+      extraContent: Map[String, String] = Map.empty,
+      prePackage: Boolean = false
+  )(
+      checking: (Config.File, String, List[Config.File], String) => Unit
   ): Unit = {
     println(s"Checking $testProject")
     val tempDir = Files.createTempDirectory("mavenBloop")
@@ -476,6 +555,7 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
     ).flatten
 
     val result = exec(allArgs, outFile.getParent().toFile())
+    val mavenOutput = result.getOrElse("")
     try {
       val projectPath = outFile.getParent()
       val projectName = projectPath.toFile().getName()
@@ -489,13 +569,13 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
         val subProjectFile = bloopDir.resolve(s"${subProjectName}.json")
         readValidBloopConfig(subProjectFile.toFile())
       }
-      checking(configFile, projectName, subProjects)
+      checking(configFile, projectName, subProjects, mavenOutput)
       tempDir.toFile().delete()
       ()
     } catch {
       case NonFatal(e) =>
         if (prePackage) println("Maven package output:\n" + packageResult)
-        println("Maven output:\n" + result)
+        println("Maven output:\n" + mavenOutput)
         throw e
     }
   }
@@ -518,6 +598,9 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
       val out = new StringBuilder()
       processBuilder.directory(cwd)
       processBuilder.command(cmd: _*)
+      // Merge stderr into stdout so assertions can see all Maven/plugin log output
+      // (e.g. "[ERROR] FAILURE ...:system" lines emitted on a failed resolution).
+      processBuilder.redirectErrorStream(true)
       var process = processBuilder.start()
 
       val reader =
@@ -680,6 +763,97 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
         hasRuntimeClasspathEntryName(configFile, "scala-library"),
         "scala-library should still be on the JVM platform runtime classpath"
       )
+    }
+  }
+
+  @Test
+  def issue27() = {
+    // A system-scoped dependency must use its provided <systemPath> instead of being
+    // resolved from remote repositories (issue #27). Without the fix the plugin attempts a
+    // (doomed) remote download and logs "FAILURE ...:system / Could not resolve". We point
+    // systemPath at jrt-fs.jar, which exists in any JDK 9+, so this is reliable cross-JDK.
+    checkWithOutput("issue_27/pom.xml") { (configFile, projectName, subprojects, mavenOutput) =>
+      assert(subprojects.isEmpty)
+      assert(configFile.project.`scala`.isDefined)
+
+      // Core regression contract: the plugin must NOT attempt to remotely resolve/download
+      // the system-scoped artifact. Before the fix the log contains lines such as
+      // "[ERROR] FAILURE ...fake-system-lib...:system" and "Downloading ...fake-system-lib...".
+      assertNoRemoteResolution(mavenOutput, "fake-system-lib")
+
+      // The system-scoped jar must appear on the compile classpath via its systemPath.
+      assert(
+        hasCompileClasspathEntryName(configFile, "jrt-fs.jar"),
+        "system-scoped jar (jrt-fs.jar) should be on the compile classpath"
+      )
+
+      // It must surface as a resolution module pointing at the provided systemPath jar
+      // (jrt-fs.jar) — proving the plugin used the local path, not a remote download.
+      val modules = configFile.project.resolution.toList.flatMap(_.modules)
+      val systemModule = modules.find(_.name == "fake-system-lib")
+      assert(
+        systemModule.isDefined,
+        "system-scoped dependency should be present as a resolution module"
+      )
+      assert(
+        systemModule.get.artifacts.exists(_.path.toString.endsWith("jrt-fs.jar")),
+        "system-scoped module must point at the provided systemPath jar, not a remote download"
+      )
+    }
+  }
+
+  // Asserts the Maven/plugin log shows no attempt to remotely resolve or download the given
+  // (system-scoped) artifact: no "FAILURE/Downloading/Could not ... <artifact>" lines.
+  private def assertNoRemoteResolution(mavenOutput: String, artifact: String): Unit = {
+    val offending = mavenOutput.linesIterator
+      .filter(_.contains(artifact))
+      .filter(l => l.contains("FAILURE") || l.contains("Downloading") || l.contains("Could not"))
+      .toList
+    assert(
+      offending.isEmpty,
+      s"plugin must not remote-resolve system-scoped '$artifact'; offending log lines:\n" +
+        offending.mkString("\n")
+    )
+  }
+
+  @Test
+  def issue27MultiModule() = {
+    // A multi-module reactor where 'lib' declares a system-scoped dependency and 'app'
+    // depends on 'lib'. The whole reactor build must succeed (check() fails if any config
+    // is not produced). Note: Maven does NOT propagate a system-scoped dependency
+    // transitively across modules, so the jar surfaces only on the declaring module ('lib').
+    // A true external dependency-of-dependency behaves the same — the consumer never sees
+    // the system artifact in its resolved artifacts — so the meaningful unit of behavior is
+    // the declaring module.
+    checkWithOutput(
+      "issue_27_multimodule/pom.xml",
+      submodules = List("issue_27_multimodule/lib/pom.xml", "issue_27_multimodule/app/pom.xml")
+    ) {
+      case (_, _, List(libConfig, appConfig), mavenOutput) =>
+        // The plugin must not attempt to remotely resolve/download the system-scoped artifact.
+        assertNoRemoteResolution(mavenOutput, "fake-system-lib")
+
+        // lib declares the system dep: it must be on lib's classpath and resolution modules,
+        // pointing at the provided systemPath jar rather than a remote download.
+        assert(
+          hasCompileClasspathEntryName(libConfig, "jrt-fs.jar"),
+          "lib should have the system-scoped jar (jrt-fs.jar) on its compile classpath"
+        )
+        val libSystemModule =
+          libConfig.project.resolution.toList.flatMap(_.modules).find(_.name == "fake-system-lib")
+        assert(
+          libSystemModule.exists(_.artifacts.exists(_.path.toString.endsWith("jrt-fs.jar"))),
+          "lib's system-scoped module must point at the provided systemPath jar"
+        )
+
+        // app only depends on lib: per Maven's non-transitive system scope, the system jar
+        // does not reach app. Asserting this documents the real (correct) behavior.
+        assert(
+          !hasCompileClasspathEntryName(appConfig, "jrt-fs.jar"),
+          "system-scoped dep must not propagate transitively onto the consumer's classpath"
+        )
+      case _ =>
+        fail("issue_27_multimodule should have exactly two submodules")
     }
   }
 }

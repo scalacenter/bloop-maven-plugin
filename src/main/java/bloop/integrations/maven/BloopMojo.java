@@ -84,6 +84,8 @@ public class BloopMojo extends ExtendedScalaContinuousCompileMojo {
 
     private ModuleType moduleType;
     private List<String> javaCompilerArgs;
+    private List<String> compileScalacArgs;
+    private List<String> testScalacArgs;
 
     @Parameter(property = "launchers")
     private AppLauncher[] launchers;
@@ -183,6 +185,24 @@ public class BloopMojo extends ExtendedScalaContinuousCompileMojo {
     public void setJavaCompilerArgs( List<String> javaCompilerArgs )
     {
         this.javaCompilerArgs = javaCompilerArgs;
+    }
+
+    public void setCompileScalacArgs( List<String> compileScalacArgs )
+    {
+        this.compileScalacArgs = compileScalacArgs;
+    }
+
+    public void setTestScalacArgs( List<String> testScalacArgs )
+    {
+        this.testScalacArgs = testScalacArgs;
+    }
+
+    public List<String> getCompileScalacArgs() {
+        return compileScalacArgs;
+    }
+
+    public List<String> getTestScalacArgs() {
+        return testScalacArgs;
     }
 
     public static enum ModuleType {

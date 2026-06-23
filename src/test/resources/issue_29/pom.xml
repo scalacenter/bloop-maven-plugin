@@ -1,0 +1,100 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>com.example</groupId>
+  <artifactId>issue_29</artifactId>
+  <version>1.0-SNAPSHOT</version>
+  <name>issue_29</name>
+  <description>Different scalac options for the compile and testCompile goals (issue #29).</description>
+
+  <properties>
+    <maven.compiler.source>1.8</maven.compiler.source>
+    <maven.compiler.target>1.8</maven.compiler.target>
+    <encoding>UTF-8</encoding>
+    <scala.version>2.13.6</scala.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.scala-lang</groupId>
+      <artifactId>scala-library</artifactId>
+      <version>2.13.9</version>
+    </dependency>
+
+    <!-- Test -->
+    <dependency>
+      <groupId>org.scalameta</groupId>
+      <artifactId>munit_2.13</artifactId>
+      <version>0.7.26</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <sourceDirectory>src/main/scala</sourceDirectory>
+    <testSourceDirectory>src/test/scala</testSourceDirectory>
+    <plugins>
+      <plugin>
+        <groupId>net.alchim31.maven</groupId>
+        <artifactId>scala-maven-plugin</artifactId>
+        <version>4.9.1</version>
+        <!--
+          Plugin-level config. scalaVersion is inherited by both goals; the <args> here is
+          overridden (replaced) by each execution's own <args>, per Maven's merge semantics.
+        -->
+        <configuration>
+          <scalaVersion>2.13.6</scalaVersion>
+          <args>
+            <arg>-deprecation</arg>
+          </args>
+        </configuration>
+        <executions>
+          <!--
+            Per-execution overrides. In the original report kind-projector was enabled here;
+            we use plain scalac flags so the test does not need to resolve a compiler-plugin jar.
+          -->
+          <execution>
+            <id>scala-compile</id>
+            <goals>
+              <goal>compile</goal>
+            </goals>
+            <configuration>
+              <args>
+                <arg>-Ywarn-unused</arg>
+              </args>
+            </configuration>
+          </execution>
+          <execution>
+            <id>scala-test-compile</id>
+            <goals>
+              <goal>testCompile</goal>
+            </goals>
+            <configuration>
+              <args>
+                <arg>-Xfatal-warnings</arg>
+              </args>
+              <!--
+                A config child the compile execution lacks. It must NOT leak into the compile
+                Bloop options: if the split DOMs were merged without cloning, building the union
+                view would graft this onto the (shared) compile execution DOM.
+              -->
+              <addScalacArgs>-Xtest-only</addScalacArgs>
+            </configuration>
+          </execution>
+          <!--
+            An execution bound to an unrelated goal. Its config must NOT contribute scalac options
+            to either the compile or the test Bloop project, since neither binds to add-source.
+          -->
+          <execution>
+            <id>scala-add-source</id>
+            <goals>
+              <goal>add-source</goal>
+            </goals>
+            <configuration>
+              <addScalacArgs>-Xunrelated-goal</addScalacArgs>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>
