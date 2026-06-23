@@ -320,6 +320,15 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
         assertEquals(List("multi_module_test_jar"), module1.project.dependencies)
         assertEquals(List("multi_module_test_jar", "foo-test", "foo"), module2.project.dependencies)
 
+        // The submodules declare scala-maven-plugin executions but no <configuration> (it comes
+        // from inherited pluginManagement). "No per-goal override" must still mean "Maven's
+        // effective config", so scala-maven-plugin's synthesized default for
+        // maven.compiler.target=1.8 (-target:8) must survive rather than collapse to no options.
+        List(module1, module2).foreach { module =>
+          val opts = module.project.`scala`.get.options
+          assert(opts.contains("-target:8"), s"scalac opts: $opts")
+        }
+
       case _ =>
         assert(false, "Multi module test jar should have two submodules")
     }
@@ -374,6 +383,39 @@ class MavenConfigGenerationTest extends BaseConfigSuite {
         "junit-interface should be present in test classpath when junit is used",
         hasJunitInterfaceInClasspath
       )
+    }
+  }
+
+  @Test
+  def issue29() = {
+    // The compile and testCompile goals carry different scalac options via per-execution
+    // configuration; each bloop project should only see its own (plus shared plugin-level) args.
+    check("issue_29/pom.xml") { (configFile, projectName, subprojects) =>
+      assert(subprojects.isEmpty)
+      val compileOpts = configFile.project.`scala`.get.options
+      val testOpts = readValidBloopConfig(
+        configFile.project.directory.resolve(".bloop").resolve(s"$projectName-test.json").toFile()
+      ).project.`scala`.get.options
+
+      assert(compileOpts.contains("-Ywarn-unused"), s"compile opts: $compileOpts")
+      assert(!compileOpts.contains("-Xfatal-warnings"), s"compile opts: $compileOpts")
+      assert(testOpts.contains("-Xfatal-warnings"), s"test opts: $testOpts")
+      assert(!testOpts.contains("-Ywarn-unused"), s"test opts: $testOpts")
+
+      // A per-execution <args> overrides (replaces) the plugin-level <args>, mirroring Maven's
+      // own configuration-merge semantics, so the shared -deprecation does not leak into either.
+      assert(!compileOpts.contains("-deprecation"), s"compile opts: $compileOpts")
+      assert(!testOpts.contains("-deprecation"), s"test opts: $testOpts")
+
+      // The testCompile-only addScalacArgs must stay out of the compile options: the split
+      // config DOMs must not contaminate each other when the union view is built.
+      assert(testOpts.contains("-Xtest-only"), s"test opts: $testOpts")
+      assert(!compileOpts.contains("-Xtest-only"), s"compile opts: $compileOpts")
+
+      // An execution bound to an unrelated goal (add-source) must not contribute scalac options
+      // to either project; only compile/testCompile-bound executions feed the goal-scoped splits.
+      assert(!compileOpts.contains("-Xunrelated-goal"), s"compile opts: $compileOpts")
+      assert(!testOpts.contains("-Xunrelated-goal"), s"test opts: $testOpts")
     }
   }
 
